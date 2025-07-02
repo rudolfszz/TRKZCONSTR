@@ -3,6 +3,8 @@ import { google } from 'googleapis';
 import open from 'open'; // optional, to open browser automatically
 import path from 'path';
 import { fileURLToPath } from 'url';
+import session from 'express-session';
+
 
 const app = express();
 const port = 3001;
@@ -14,6 +16,20 @@ const REDIRECT_URI = 'http://localhost:3001/oauth2callback';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+app.use(express.static(path.join(__dirname, 'HTMLCode')));
+app.use('/JScode', express.static(path.join(__dirname, 'JScode')));
+
+app.use(session({
+  secret: 'af9f8afj@29sdj!#sdklf8923ufwqef',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: false, // true only if using HTTPS
+    httpOnly: true,
+    sameSite: 'lax' // or 'none' if using cross-site cookies (must be secure then)
+  }
+}));
 
 const oauth2Client = new google.auth.OAuth2(
     CLIENT_ID,
@@ -46,7 +62,9 @@ app.get('/oauth2callback', async (req, res) => {
         const { tokens } = await oauth2Client.getToken(code);
         oauth2Client.setCredentials(tokens);
         userTokens = tokens; // save tokens for API calls
-        res.send('Login successful! You can now close this tab and use the app.');
+        // res.send('Login successful! You can now close this tab and use the app.');
+        // setTimeout(1000);
+        res.redirect("http://localhost:3001/")
     } catch (err) {
         res.status(500).send('Error retrieving access token');
     }
@@ -83,4 +101,12 @@ app.listen(port, () => {
     console.log(`Server listening on http://localhost:${port}`);
     // Optional: open login page automatically
     open(`http://localhost:${port}/login`);
+});
+
+app.get('/user', (req, res) => {
+    if (req.session && req.session.user) {
+        res.json({ loggedIn: true, user: req.session.user });
+    } else {
+        res.json({ loggedIn: false });
+    }
 });
