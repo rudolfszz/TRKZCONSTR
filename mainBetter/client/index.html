@@ -4,44 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>My Google AI Assistant</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      max-width: 600px;
-      margin: 40px auto;
-    }
-
-    button {
-      padding: 10px;
-      margin: 10px 0;
-      cursor: pointer;
-    }
-
-    textarea,
-    input {
-      width: 100%;
-      padding: 10px;
-      margin: 10px 0;
-      box-sizing: border-box;
-    }
-
-    #answer {
-      white-space: pre-wrap;
-      background: #f0f0f0;
-      padding: 10px;
-      min-height: 50px;
-    }
-
-    ul {
-      list-style: none;
-      padding-left: 1em;
-    }
-
-    ul ul {
-      padding-left: 1.5em;
-      font-size: 0.9em;
-    }
-  </style>
+  <link rel="stylesheet" href="/css/styles.css" />
   <script defer src="main.js"></script>
 </head>
 
@@ -54,19 +17,34 @@
   </div>
 
   <div id="main-section" style="display:none;">
-    <h2>Drive Files</h2>
-    <button id="list-files-btn">List Drive Files</button>
+    <h2>Drive Files & Folders</h2>
+    <button id="list-files-btn" type="button">List Drive Files & Folders</button>
 
     <ul id="file-list"></ul>
 
     <h3>Search Drive</h3>
-    <input type="text" id="search-input" placeholder="e.g. name contains 'report'">
-    <button id="search-button">Search</button>
+    <input type="text" id="search-input" placeholder="e.g. name contains 'report'" />
+    <button id="search-button" type="button">Search</button>
     <ul id="search-results"></ul>
 
-    <form id="add-Folder-Form" style="margin-top: 1em;">
+    <form id="add-Folder-Form">
       <input type="text" id="folder-Name" placeholder="New folder name" required />
-      <button type="submit" id="add-folder-btn">Add Folder</button>
+      <button type="submit" id="add-folder-btn" type="button">Add Folder</button>
+    </form>
+
+    <form id="create-file-form">
+      <select id="folder-select" required>
+        <option value="" disabled selected>Select folder</option>
+      </select>
+
+      <select id="file-type-select" required>
+        <option value="" disabled selected>Select file type</option>
+        <option value="document">Google Doc</option>
+        <option value="spreadsheet">Google Sheet</option>
+        <option value="presentation">Google Slide</option>
+      </select>
+
+      <button type="submit" id="create-file-btn">Create File</button>
     </form>
 
     <h2>Ask a Question</h2>

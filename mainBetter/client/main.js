@@ -10,6 +10,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const mainSection = document.getElementById("main-section");
   const addFolderForm = document.getElementById("add-Folder-Form");
   const folderNameInput = document.getElementById("folder-Name");
+  const folderSelect = document.getElementById('folder-select');
+  const createFileForm = document.getElementById('create-file-form');
 
   // Check auth status
   const userStatus = await fetch("/user").then(res => res.json());
@@ -39,19 +41,36 @@ document.addEventListener("DOMContentLoaded", async () => {
         throw new Error('Invalid response: missing "structured" array');
       }
 
+      function getEditorUrl(mimeType, fileId) {
+        switch (mimeType) {
+          case 'application/vnd.google-apps.document':
+            return `https://docs.google.com/document/d/${fileId}/edit`;
+          case 'application/vnd.google-apps.spreadsheet':
+            return `https://docs.google.com/spreadsheets/d/${fileId}/edit`;
+          case 'application/vnd.google-apps.presentation':
+            return `https://docs.google.com/presentation/d/${fileId}/edit`;
+          case 'application/vnd.google-apps.drawing':
+            return `https://docs.google.com/drawings/d/${fileId}/edit`;
+          case 'application/vnd.google-apps.form':
+            return `https://docs.google.com/forms/d/${fileId}/edit`;
+          default:
+            return `https://drive.google.com/file/d/${fileId}/view`;
+        }
+      }
+
       data.structured.forEach(item => {
         const li = document.createElement('li');
 
         if (item.mimeType === 'application/vnd.google-apps.folder') {
-          // Create folder header as clickable toggle
-          const folderHeader = document.createElement('span');
-          folderHeader.style.cursor = 'pointer';
-          folderHeader.textContent = '📁 ' + item.name;
+          const folderToggle = document.createElement('button');
+          folderToggle.className = 'folder-toggle';
+          folderToggle.setAttribute('aria-expanded', 'false');
+          folderToggle.innerHTML = '▶ 📁 ' + item.name;
 
-          // Container for files inside folder, initially hidden
           const filesContainer = document.createElement('ul');
           filesContainer.style.display = 'none';
           filesContainer.style.paddingLeft = '1.5em';
+          filesContainer.setAttribute('role', 'group');
 
           if (Array.isArray(item.files)) {
             item.files.forEach(file => {
@@ -60,26 +79,27 @@ document.addEventListener("DOMContentLoaded", async () => {
               fileLink.textContent = `📄 ${file.name}`;
               fileLink.target = '_blank';
               fileLink.rel = 'noopener noreferrer';
-              fileLink.href = `https://drive.google.com/file/d/${file.id}/view`;
+              fileLink.href = getEditorUrl(file.mimeType, file.id);
               fileLi.appendChild(fileLink);
               filesContainer.appendChild(fileLi);
             });
           }
 
-          // Toggle files on folder header click
-          folderHeader.addEventListener('click', () => {
-            filesContainer.style.display = filesContainer.style.display === 'none' ? 'block' : 'none';
+          folderToggle.addEventListener('click', () => {
+            const expanded = filesContainer.style.display === 'block';
+            filesContainer.style.display = expanded ? 'none' : 'block';
+            folderToggle.setAttribute('aria-expanded', String(!expanded));
+            folderToggle.innerHTML = (expanded ? '▶' : '▼') + ' 📁 ' + item.name;
           });
 
-          li.appendChild(folderHeader);
+          li.appendChild(folderToggle);
           li.appendChild(filesContainer);
         } else {
-          // Regular file link
           const link = document.createElement('a');
           link.textContent = '📄 ' + item.name;
           link.target = '_blank';
           link.rel = 'noopener noreferrer';
-          link.href = `https://drive.google.com/file/d/${item.id}/view`;
+          link.href = getEditorUrl(item.mimeType, item.id);
           li.appendChild(link);
         }
 
@@ -90,6 +110,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       fileList.innerHTML = `<li style="color: red;">Failed to load files. See console for details.</li>`;
     }
   };
+
 
 
   askBtn.onclick = async () => {
@@ -151,4 +172,96 @@ document.addEventListener("DOMContentLoaded", async () => {
       alert('Search failed. See console for details.');
     }
   });
+
+
+  async function populateFolderSelect() {
+    folderSelect.innerHTML = '<option value="" disabled selected>Select folder</option>';
+
+    try {
+      const res = await fetch('/drive-files');
+      if (!res.ok) throw new Error(`Failed to fetch folders: ${res.status}`);
+
+      const data = await res.json();
+      if (!Array.isArray(data.structured)) throw new Error('Invalid response: missing "structured" array');
+
+      // Filter folders only
+      const folders = data.structured.filter(item => item.mimeType === 'application/vnd.google-apps.folder');
+
+      folders.forEach(folder => {
+        const option = document.createElement('option');
+        option.value = folder.id;
+        option.textContent = folder.name;
+        folderSelect.appendChild(option);
+      });
+    } catch (err) {
+      console.error('Error populating folders dropdown:', err);
+    }
+  }
+
+  // Call once after login to populate folders dropdown
+  if (userStatus.loggedIn) {
+    populateFolderSelect();
+  }
+
+  // Also refresh folder list after creating a folder
+  addFolderForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const newFolderName = folderNameInput.value.trim();
+    if (!newFolderName) {
+      alert('Folder name cannot be empty');
+      return;
+    }
+
+    try {
+      const res = await fetch('/create-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newFolderName }),
+      });
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+
+      const data = await res.json();
+      alert(`Folder created with ID: ${data.folderId}`);
+      folderNameInput.value = '';
+      listFilesBtn.onclick(); // Refresh file list
+      await populateFolderSelect(); // Refresh folder dropdown
+    } catch (error) {
+      console.error('Failed to create folder:', error);
+      alert('Failed to create folder. See console for details.');
+    }
+  });
+
+  // Handle file creation form submission
+  createFileForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const folderId = folderSelect.value;
+    const fileType = document.getElementById('file-type-select').value;
+
+    if (!folderId || !fileType) {
+      alert('Please select both folder and file type.');
+      return;
+    }
+
+    try {
+      const res = await fetch('/create-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderId, fileType }),
+      });
+
+      if (!res.ok) throw new Error(`Create file failed: ${res.status}`);
+
+      const data = await res.json();
+
+      // Redirect to new file's Google editor URL
+      window.open(data.fileUrl, '_blank');
+
+    } catch (error) {
+      console.error('Failed to create file:', error);
+      alert('Failed to create file. See console for details.');
+    }
+  });
+
+
 });

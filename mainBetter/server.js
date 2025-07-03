@@ -16,6 +16,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 app.use(express.static(path.join(__dirname, 'client')));
+app.use('/css', express.static(path.join(__dirname, 'css')));
 app.use(express.json());
 app.use(session({
     secret: 'supersecret',
