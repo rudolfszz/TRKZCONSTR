@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>My Google AI Assistant</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+  <script defer src="main.js"></script>
+</head>
+
+<body>
+  <h1>Google + AI Assistant</h1>
+
+  <div id="auth-section">
+    <button id="login-btn">Login with Google</button>
+    <button id="logout-btn" style="display:none;">Logout</button>
+  </div>
+
+  <div id="main-section" style="display:none;">
+    <h2>Drive Files & Folders</h2>
+    <button id="list-files-btn" type="button">List Drive Files & Folders</button>
+
+    <ul id="file-list"></ul>
+
+    <h3>Search Drive</h3>
+    <input type="text" id="search-input" placeholder="e.g. name contains 'report'" />
+    <button id="search-button" type="button">Search</button>
+    <ul id="search-results"></ul>
+
+    <form id="add-Folder-Form">
+      <input type="text" id="folder-Name" placeholder="New folder name" required />
+      <button type="submit" id="add-folder-btn" type="button">Add Folder</button>
+    </form>
+
+    <form id="create-file-form">
+      <select id="folder-select" required>
+        <option value="" disabled selected>Select folder</option>
+      </select>
+
+      <select id="file-type-select" required>
+        <option value="" disabled selected>Select file type</option>
+        <option value="document">Google Doc</option>
+        <option value="spreadsheet">Google Sheet</option>
+        <option value="presentation">Google Slide</option>
+      </select>
+
+      <button type="submit" id="create-file-btn">Create File</button>
+    </form>
+
+    <h2>Ask a Question</h2>
+    <textarea id="question" rows="4" placeholder="Ask a question based on your Drive..."></textarea>
+    <button id="ask-btn">Ask</button>
+    <div id="answer"></div>
+  </div>
+</body>
+
+</html>

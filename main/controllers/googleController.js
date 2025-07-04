@@ -80,7 +80,7 @@ export const listDriveFiles = async (req, res) => {
 
         return a.name.localeCompare(b.name);
     });
-    
+
     res.json({ structured });
 };
 
@@ -98,8 +98,6 @@ export const embedDriveFiles = async (req, res) => {
 
     res.json({ status: 'Embedded successfully' });
 };
-
-// googleController.js
 
 export const searchDriveFiles = async (req, res) => {
     try {
@@ -133,3 +131,48 @@ export const searchDriveFiles = async (req, res) => {
     }
 };
 
+export const createFile = async (req, res) => {
+    const { folderId, fileType } = req.body;
+    const drive = getDriveClient(req);
+
+    const mimeTypes = {
+        document: 'application/vnd.google-apps.document',
+        spreadsheet: 'application/vnd.google-apps.spreadsheet',
+        presentation: 'application/vnd.google-apps.presentation'
+    };
+
+    const mimeType = mimeTypes[fileType];
+
+    if (!mimeType) {
+        return res.status(400).json({ error: 'Invalid file type' });
+    }
+
+    try {
+        const response = await drive.files.create({
+            resource: {
+                name: `New ${fileType.charAt(0).toUpperCase() + fileType.slice(1)}`,
+                mimeType,
+                parents: [folderId]
+            },
+            fields: 'id, name'
+        });
+
+        const fileId = response.data.id;
+
+        // Generate file edit URL based on file type
+        const baseUrls = {
+            document: `https://docs.google.com/document/d/${fileId}/edit`,
+            spreadsheet: `https://docs.google.com/spreadsheets/d/${fileId}/edit`,
+            presentation: `https://docs.google.com/presentation/d/${fileId}/edit`,
+        };
+
+        res.json({
+            fileId,
+            fileName: response.data.name,
+            fileUrl: baseUrls[fileType]
+        });
+    } catch (error) {
+        console.error('Failed to create file:', error);
+        res.status(500).json({ error: 'File creation failed' });
+    }
+};

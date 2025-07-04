@@ -1,5 +1,4 @@
 {
-<<<<<<< HEAD
   "name": "trkzconstruct",
   "version": "1.0.0",
   "main": "index.js",
@@ -19,15 +18,3 @@
     "open": "^10.1.2"
   }
 }
-=======
-  "dependencies": {
-    "dotenv": "^17.0.0",
-    "express": "^5.1.0",
-    "express-session": "^1.18.1",
-    "googleapis": "^150.0.1",
-    "passport": "^0.7.0",
-    "passport-google-oauth20": "^2.0.0"
-  }
-
-}
->>>>>>> 19933246062e1875a48c2b68cdfbef39f97e82a6
