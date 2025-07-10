@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Worker Dashboard</title>
+</head>
+<body>
+    <h1>Worker Dashboard</h1>
+    <div>
+        <label for="worker-project-select">Select Your Project:</label>
+        <select id="worker-project-select"></select>
+    </div>
+    <h2>Your Worker Folder</h2>
+    <ul id="worker-file-list"></ul>
+    <div id="worker-info"></div>
+    <div id="quick-note-section">
+        <h2>Add Quick Note</h2>
+        <form id="quick-note-form">
+            <input type="text" id="note-title" placeholder="Note Title" required />
+            <textarea id="note-body" placeholder="Note Body" required></textarea>
+            <button type="submit">Add Note</button>
+        </form>
+        <div id="note-result"></div>
+    </div>
+    <script src="workerSide.js"></script>
+</body>
+</html>
