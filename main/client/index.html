@@ -11,6 +11,14 @@
     <button id="manager-view">Manager View</button>
     <button id="worker-view">Worker View</button>
     <script>
+        // Check login status before showing page
+        fetch('/user')
+            .then(res => res.json())
+            .then(data => {
+                if (!data.loggedIn) {
+                    window.location.href = 'login.html';
+                }
+            });
         document.getElementById('manager-view').onclick = () => {
             window.location.href = 'project.html';
         };
