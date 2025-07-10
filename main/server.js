@@ -26,13 +26,11 @@ app.use(session({
 
 import authRoutes from './routes/authRoutes.js';
 import googleRoutes from './routes/googleRoutes.js';
-import aiRoutes from './routes/aiRoutes.js';
 
 app.use(authRoutes);
 app.use(googleRoutes);
-app.use(aiRoutes);
 
 app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
-    open(`http://localhost:${port}/login`);
+    open(`http://localhost:${port}/login.html`);
 });

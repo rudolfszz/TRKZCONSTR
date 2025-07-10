@@ -1,12 +1,13 @@
 import express from 'express';
-import { createFolder, createSheet, listDriveFiles, embedDriveFiles, searchDriveFiles, createFile } from '../controllers/googleController.js';
+import { createProjectFolder, listProjectFolders, listProjectFiles, getWorkerFolderId, shareWorkerFolder, listAccessibleWorkerFolders, addWorkerNote } from '../controllers/googleController.js';
 const router = express.Router();
 
-router.post('/create-folder', createFolder);
-router.post('/create-sheet', createSheet);
-router.get('/drive-files', listDriveFiles);
-router.post('/embed-drive-files', embedDriveFiles);
-router.get('/search-drive-files', searchDriveFiles);
-router.post('/create-file', createFile);
+router.post('/create-project-folder', createProjectFolder);
+router.get('/list-project-folders', listProjectFolders);
+router.get('/list-project-files', listProjectFiles);
+router.get('/get-worker-folder-id', getWorkerFolderId);
+router.post('/share-worker-folder', shareWorkerFolder);
+router.get('/list-accessible-worker-folders', listAccessibleWorkerFolders);
+router.post('/add-worker-note', addWorkerNote);
 
 export default router;
