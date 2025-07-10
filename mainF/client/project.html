@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Projects</title>
+</head>
+<body>
+    <h1>Projects</h1>
+    <form id="project-form">
+        <input type="text" id="project-name" placeholder="Project name" required />
+        <button type="submit">Create New Project</button>
+    </form>
+    <div id="result"></div>
+    <div>
+        <label for="project-select">Choose Existing Project:</label>
+        <select id="project-select"></select>
+        <button id="go-to-selected-project" type="button">Go to Project</button>
+    </div>
+    <div id="worker-access-section">
+        <h2>Share Worker Folder</h2>
+        <label for="worker-project-select">Select Project:</label>
+        <select id="worker-project-select"></select>
+        <form id="add-worker-form">
+            <input type="email" id="worker-email" placeholder="Worker Gmail" required />
+            <button type="submit">Add Worker</button>
+        </form>
+        <ul id="worker-list"></ul>
+        <div id="worker-share-result"></div>
+    </div>
+    <script src="project.js"></script>
+</body>
+</html>
