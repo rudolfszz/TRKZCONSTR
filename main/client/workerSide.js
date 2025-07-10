@@ -54,14 +54,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Add quick note functionality
     const quickNoteForm = document.getElementById('quick-note-form');
-    const noteTitleInput = document.getElementById('note-title');
     const noteBodyInput = document.getElementById('note-body');
     const noteResult = document.getElementById('note-result');
     let currentProjectId = null;
     let logDocId = null;
 
     // Disable form until log doc is loaded
-    quickNoteForm.querySelectorAll('input, textarea, button').forEach(el => el.disabled = true);
+    quickNoteForm.querySelectorAll('textarea, button').forEach(el => el.disabled = true);
 
     // Helper to get the worker log doc id for the selected project
     async function fetchWorkerLogDocId(workersFolderId) {
@@ -90,10 +89,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     async function enableQuickNoteFormIfReady() {
         if (logDocId) {
-            quickNoteForm.querySelectorAll('input, textarea, button').forEach(el => el.disabled = false);
+            quickNoteForm.querySelectorAll('textarea, button').forEach(el => el.disabled = false);
             noteResult.textContent = '';
         } else {
-            quickNoteForm.querySelectorAll('input, textarea, button').forEach(el => el.disabled = true);
+            quickNoteForm.querySelectorAll('textarea, button').forEach(el => el.disabled = true);
             noteResult.textContent = 'Log document not found for this project.';
         }
     }
@@ -108,20 +107,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             noteResult.textContent = 'Could not find your log document.';
             return;
         }
-        const title = noteTitleInput.value.trim();
         const body = noteBodyInput.value.trim();
-        if (!title || !body) return;
+        if (!body) return;
         noteResult.textContent = 'Adding note...';
         try {
             const res = await fetch('/add-worker-note', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ docId: logDocId, title, body })
+                body: JSON.stringify({ docId: logDocId, body })
             });
             const data = await res.json();
             if (data.success) {
                 noteResult.textContent = 'Note added!';
-                noteTitleInput.value = '';
                 noteBodyInput.value = '';
             } else {
                 noteResult.textContent = data.error || 'Failed to add note.';
@@ -152,4 +149,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         await updateLogDocId(currentProjectId);
     }
     initialSetup();
+
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+        logoutBtn.onclick = () => {
+            fetch('/logout').then(() => window.location.href = 'login.html');
+        };
+    }
 });

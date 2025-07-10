@@ -114,6 +114,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     workerForm.onsubmit = async (e) => {
         e.preventDefault();
+        // Check if manager is logged in before sharing
+        const userRes = await fetch('/user');
+        const userData = await userRes.json();
+        if (!userData.loggedIn) {
+            workerShareResult.textContent = 'You must be logged in as a manager to add a worker.';
+            window.location.href = 'login.html';
+            return;
+        }
         const email = workerEmailInput.value.trim();
         const projectId = document.getElementById('worker-project-select').value;
         if (!email || !projectId) return;
@@ -132,6 +140,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ folderId: data.workerFolderId, email })
             });
+            if (shareRes.status === 401) {
+                workerShareResult.textContent = 'Session expired. Please log in again.';
+                window.location.href = 'login.html';
+                return;
+            }
             const shareData = await shareRes.json();
             if (shareData.success) {
                 addedWorkers.push(email);
@@ -139,7 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 workerShareResult.textContent = 'Worker added and folder shared!';
                 workerEmailInput.value = '';
             } else {
-                workerShareResult.textContent = shareData.error || 'Failed to share folder.';
+                workerShareResult.textContent = (shareData.error ? shareData.error + (shareData.details ? ' (' + shareData.details + ')' : '') : 'Failed to share folder.');
             }
         } catch (err) {
             workerShareResult.textContent = 'Error sharing folder.';
@@ -153,6 +166,14 @@ document.addEventListener('DOMContentLoaded', () => {
             li.textContent = email;
             workerList.appendChild(li);
         });
+    }
+
+    // Logout button functionality
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+        logoutBtn.onclick = () => {
+            fetch('/logout').then(() => window.location.href = 'login.html');
+        };
     }
 
     loadProjectsDropdown();

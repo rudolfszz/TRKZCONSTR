@@ -10,21 +10,7 @@
     <p>Choose your view:</p>
     <button id="manager-view">Manager View</button>
     <button id="worker-view">Worker View</button>
-    <script>
-        // Check login status before showing page
-        fetch('/user')
-            .then(res => res.json())
-            .then(data => {
-                if (!data.loggedIn) {
-                    window.location.href = 'login.html';
-                }
-            });
-        document.getElementById('manager-view').onclick = () => {
-            window.location.href = 'project.html';
-        };
-        document.getElementById('worker-view').onclick = () => {
-            window.location.href = 'workerSide.html';
-        };
-    </script>
+    <button id="logout-btn">Log Out</button>
+    <script src="index.js"></script>
 </body>
 </html>
