@@ -40,7 +40,7 @@ export const oauthCallback = async (req, res) => {
         // Log for debugging
         console.log('Extracted email:', email);
         req.session.user = { authenticated: true, tokens, email };
-        res.redirect('/chooseView.html');
+        res.redirect('/index.html');
     } catch (err) {
         res.status(500).send('Auth failed');
     }
