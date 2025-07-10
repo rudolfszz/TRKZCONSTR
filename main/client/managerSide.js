@@ -61,4 +61,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     // On load, check for projectId in URL
     const projectId = getProjectIdFromUrl();
     fetchProjects(projectId);
+
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+        logoutBtn.onclick = () => {
+            fetch('/logout').then(() => window.location.href = 'login.html');
+        };
+    }
 });

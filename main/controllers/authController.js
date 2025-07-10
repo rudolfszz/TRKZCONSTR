@@ -1,12 +1,14 @@
-import { oauth2Client, SCOPES } from '../services/googleService.js';
+import { getOAuth2Client, SCOPES } from '../services/googleService.js';
 
 export const login = (req, res) => {
+    const oauth2Client = getOAuth2Client();
     const authUrl = oauth2Client.generateAuthUrl({ access_type: 'offline', scope: SCOPES });
     res.redirect(authUrl);
 };
 
 export const oauthCallback = async (req, res) => {
     const code = req.query.code;
+    const oauth2Client = getOAuth2Client();
     try {
         const { tokens } = await oauth2Client.getToken(code);
         oauth2Client.setCredentials(tokens);

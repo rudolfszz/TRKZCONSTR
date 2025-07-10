@@ -127,9 +127,14 @@ export const getWorkerFolderId = async (req, res) => {
 
 // Share the worker folder with a user and create a subfolder for them
 export const shareWorkerFolder = async (req, res) => {
+    if (!req.session.user || !req.session.user.tokens) {
+        return res.status(401).json({ error: 'Not authenticated. Please log in as a manager.' });
+    }
     const { folderId, email } = req.body;
     if (!folderId || !email) return res.status(400).json({ error: 'Missing folderId or email' });
     try {
+        // Debug: log session contents for troubleshooting
+        console.log('Session at shareWorkerFolder:', req.session);
         const drive = getDriveClient(req);
         // 1. Create a subfolder for the worker (projectName-workerName)
         const workerName = email.split('@')[0];
@@ -190,7 +195,8 @@ export const shareWorkerFolder = async (req, res) => {
         });
         res.json({ success: true, workerFolderId: workerFolder.data.id, logDocId: docFile.data.id });
     } catch (err) {
-        res.status(500).json({ error: 'Failed to share folder, create worker subfolder, or log doc' });
+        console.error('Failed to share worker folder:', err);
+        res.status(500).json({ error: 'Failed to share folder, create worker subfolder, or log doc', details: err.message });
     }
 };
 
@@ -234,18 +240,30 @@ export const listAccessibleWorkerFolders = async (req, res) => {
 
 // Add a note to the worker's log Google Doc
 export const addWorkerNote = async (req, res) => {
-    const { docId, title, body } = req.body;
-    if (!docId || !title || !body) return res.status(400).json({ error: 'Missing docId, title, or body' });
+    const { docId, body } = req.body;
+    if (!docId || !body) return res.status(400).json({ error: 'Missing docId or body' });
     try {
-        const drive = getDriveClient(req);
-        const docs = google.docs({ version: 'v1', auth: drive._options.auth });
+        // Use a new OAuth2 client instance for each request
+        const { getOAuth2Client } = await import('../services/googleService.js');
+        const oauth2Client = getOAuth2Client();
+        if (!req.session.user?.tokens) {
+            throw new Error('No tokens found in session. User must log in.');
+        }
+        oauth2Client.setCredentials(req.session.user.tokens);
+        const docs = google.docs({ version: 'v1', auth: oauth2Client });
         // Get the current document content to find the end
         const doc = await docs.documents.get({ documentId: docId });
-        const endIndex = doc.data.body.content[doc.data.body.content.length - 1].endIndex - 1;
-        // Prepare the note content
+        let endIndex = 1;
+        if (doc.data.body && doc.data.body.content && doc.data.body.content.length > 0) {
+            const last = doc.data.body.content[doc.data.body.content.length - 1];
+            if (last.endIndex) {
+                endIndex = last.endIndex - 1;
+            }
+        }
+        // Prepare the note content (no title, just timestamp and body)
         const now = new Date();
         const dateStr = now.toLocaleString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-        const noteText = `${dateStr}\n${title}\n${body}\n\n`;
+        const noteText = `${dateStr}\n${body}\n\n`;
         // Insert the note at the end
         await docs.documents.batchUpdate({
             documentId: docId,
@@ -262,6 +280,7 @@ export const addWorkerNote = async (req, res) => {
         });
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ error: 'Failed to add note to log document' });
+        console.error('Failed to add note to log document:', err);
+        res.status(500).json({ error: 'Failed to add note to log document', details: err.message });
     }
 };
