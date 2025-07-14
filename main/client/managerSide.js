@@ -68,4 +68,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             fetch('/logout').then(() => window.location.href = 'login.html');
         };
     }
+
+    const switchToWorkerBtn = document.getElementById('switch-to-worker-btn');
+    if (switchToWorkerBtn) {
+        switchToWorkerBtn.onclick = () => {
+            window.location.href = 'workerSide.html';
+        };
+    }
 });

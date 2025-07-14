@@ -1,5 +1,6 @@
 import { getDriveClient } from '../services/googleService.js';
 import { google } from 'googleapis';
+import { Readable } from 'stream';
 
 export const createProjectFolder = async (req, res) => {
     const { name } = req.body;
@@ -282,5 +283,56 @@ export const addWorkerNote = async (req, res) => {
     } catch (err) {
         console.error('Failed to add note to log document:', err);
         res.status(500).json({ error: 'Failed to add note to log document', details: err.message });
+    }
+};
+
+// Upload a photo to the worker's folder
+export const uploadWorkerPhoto = async (req, res) => {
+    try {
+        if (!req.session.user || !req.session.user.tokens) {
+            return res.status(401).json({ error: 'Not authenticated' });
+        }
+        const drive = getDriveClient(req);
+        const { projectId } = req.body;
+        if (!projectId) return res.status(400).json({ error: 'Project ID required' });
+        if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+        // Find the worker's subfolder in the Workers folder
+        const userEmail = req.session.user.email;
+        const workerName = userEmail.split('@')[0];
+        // List subfolders in the Workers folder
+        const subfolders = await drive.files.list({
+            q: `'${projectId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+            fields: 'files(id, name)'
+        });
+        // Debug log: list all subfolders found
+        console.log('Worker photo upload: subfolders found:', subfolders.data.files);
+        const mySubfolder = subfolders.data.files.find(f => f.name && f.name.includes(workerName));
+        if (!mySubfolder) {
+            console.error('Worker photo upload: subfolder not found for', workerName);
+            return res.status(404).json({ error: 'Worker subfolder not found' });
+        }
+
+        // Upload the photo to the worker's subfolder
+        const fileMeta = {
+            name: req.file.originalname,
+            parents: [mySubfolder.id]
+        };
+        // Use a Readable stream for Google Drive upload
+        const bufferStream = new Readable();
+        bufferStream.push(req.file.buffer);
+        bufferStream.push(null);
+        await drive.files.create({
+            resource: fileMeta,
+            media: {
+                mimeType: req.file.mimetype,
+                body: bufferStream
+            },
+            fields: 'id, name'
+        });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Worker photo upload error:', err);
+        res.status(500).json({ error: 'Failed to upload photo', details: err.message });
     }
 };

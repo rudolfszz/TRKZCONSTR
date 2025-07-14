@@ -156,4 +156,96 @@ document.addEventListener('DOMContentLoaded', async () => {
             fetch('/logout').then(() => window.location.href = 'login.html');
         };
     }
+
+    const switchToManagerBtn = document.getElementById('switch-to-manager-btn');
+    if (switchToManagerBtn) {
+        switchToManagerBtn.onclick = () => {
+            window.location.href = 'managerSide.html';
+        };
+    }
+
+    // Camera/photo functionality
+    const startCameraBtn = document.getElementById('start-camera-btn');
+    const takePhotoBtn = document.getElementById('take-photo-btn');
+    const uploadPhotoBtn = document.getElementById('upload-photo-btn');
+    const cameraStream = document.getElementById('camera-stream');
+    const photoCanvas = document.getElementById('photo-canvas');
+    const photoResult = document.getElementById('photo-result');
+    const selectPhotoInput = document.getElementById('select-photo-input');
+    let photoBlob = null;
+    let stream = null;
+
+    startCameraBtn.onclick = async () => {
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                cameraStream.srcObject = stream;
+                cameraStream.style.display = '';
+                takePhotoBtn.style.display = '';
+                startCameraBtn.style.display = 'none';
+                photoResult.textContent = '';
+            } catch (err) {
+                photoResult.textContent = 'Camera access denied or unavailable.';
+            }
+        } else {
+            photoResult.textContent = 'Camera not supported.';
+        }
+    };
+
+    takePhotoBtn.onclick = () => {
+        photoCanvas.getContext('2d').drawImage(cameraStream, 0, 0, photoCanvas.width, photoCanvas.height);
+        photoCanvas.toBlob(blob => {
+            photoBlob = blob;
+            uploadPhotoBtn.style.display = '';
+        }, 'image/jpeg');
+        photoCanvas.style.display = '';
+        cameraStream.style.display = 'none';
+        takePhotoBtn.style.display = 'none';
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+        }
+    };
+
+    selectPhotoInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            photoBlob = file;
+            photoResult.textContent = '';
+            uploadPhotoBtn.style.display = '';
+            cameraStream.style.display = 'none';
+            photoCanvas.style.display = 'none';
+            takePhotoBtn.style.display = 'none';
+        }
+    };
+
+    uploadPhotoBtn.onclick = async () => {
+        if (!photoBlob || !currentProjectId) {
+            photoResult.textContent = 'No photo to upload or no project selected.';
+            return;
+        }
+        photoResult.textContent = 'Uploading photo...';
+        const formData = new FormData();
+        formData.append('photo', photoBlob, `photo_${Date.now()}.jpg`);
+        formData.append('projectId', currentProjectId);
+        try {
+            const res = await fetch('/upload-worker-photo', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (data.success) {
+                photoResult.textContent = 'Photo uploaded!';
+                photoCanvas.style.display = 'none';
+                uploadPhotoBtn.style.display = 'none';
+                startCameraBtn.style.display = '';
+                selectPhotoInput.value = '';
+                photoBlob = null;
+                loadWorkerFiles(currentProjectId);
+            } else {
+                photoResult.textContent = data.error || 'Failed to upload photo.';
+            }
+        } catch (err) {
+            photoResult.textContent = 'Error uploading photo.';
+        }
+    };
 });
