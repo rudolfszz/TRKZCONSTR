@@ -40,7 +40,10 @@ export const oauthCallback = async (req, res) => {
         }
 
         // Log for debugging
-        console.log('Extracted email:', email);
+        if (!email) {
+            console.error('Email extraction failed');
+            return res.status(400).send('Email extraction failed');
+        }
         req.session.user = { authenticated: true, tokens, email };
         res.redirect('/index.html');
     } catch (err) {
@@ -58,7 +61,7 @@ export const logout = (req, res) => {
 
 export const getUser = (req, res) => {
     if (req.session.user) {
-        res.json({ loggedIn: true, email: req.session.user.email || null });
+        res.json({ loggedIn: true, email: req.session.user.email || null, csrfToken: req.session.csrfToken });
     } else {
         res.json({ loggedIn: false });
     }

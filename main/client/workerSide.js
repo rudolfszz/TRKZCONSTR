@@ -5,51 +5,64 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Fetch all worker folders the user has access to
     async function fetchWorkerProjects() {
-        const res = await fetch('/list-accessible-worker-folders');
-        const data = await res.json();
-        projectSelect.innerHTML = '';
-        if (data.folders && data.folders.length) {
-            data.folders.forEach(folder => {
+        try {
+            const res = await fetch('/list-accessible-worker-folders');
+            const data = await res.json();
+            projectSelect.innerHTML = '';
+            if (data.folders && data.folders.length) {
+                data.folders.forEach(folder => {
+                    const option = document.createElement('option');
+                    option.value = folder.id;
+                    option.textContent = folder.displayName || folder.projectName || folder.name;
+                    projectSelect.appendChild(option);
+                });
+                loadWorkerFiles(data.folders[0].id);
+            } else {
                 const option = document.createElement('option');
-                option.value = folder.id;
-                option.textContent = folder.projectName || folder.name;
+                option.textContent = 'No projects found';
+                option.disabled = true;
                 projectSelect.appendChild(option);
-            });
-            loadWorkerFiles(data.folders[0].id);
-        } else {
+                fileList.innerHTML = '<li>No accessible worker folders.</li>';
+            }
+        } catch (err) {
+            projectSelect.innerHTML = '';
             const option = document.createElement('option');
-            option.textContent = 'No projects found';
+            option.textContent = 'Error loading projects';
             option.disabled = true;
             projectSelect.appendChild(option);
-            fileList.innerHTML = '<li>No accessible worker folders.</li>';
+            fileList.innerHTML = '<li>Error loading folders.</li>';
         }
     }
 
     // Fetch files in the selected worker folder
     async function loadWorkerFiles(folderId) {
         fileList.innerHTML = 'Loading...';
-        const res = await fetch(`/list-project-files?folderId=${folderId}`);
-        const data = await res.json();
-        fileList.innerHTML = '';
-        if (!data.files.length) {
-            fileList.innerHTML = '<li>No files found.</li>';
-            return;
-        }
-        data.files.forEach(file => {
-            const li = document.createElement('li');
-            let url = '#';
-            if (file.mimeType === 'application/vnd.google-apps.folder') {
-                url = `https://drive.google.com/drive/folders/${file.id}`;
-            } else if (file.mimeType === 'application/vnd.google-apps.document') {
-                url = `https://docs.google.com/document/d/${file.id}/edit`;
-            } else if (file.mimeType === 'application/vnd.google-apps.spreadsheet') {
-                url = `https://docs.google.com/spreadsheets/d/${file.id}/edit`;
-            } else {
-                url = `https://drive.google.com/file/d/${file.id}/view`;
+        try {
+            const res = await fetch(`/list-project-files?folderId=${folderId}`);
+            const data = await res.json();
+            fileList.innerHTML = '';
+            if (!data.files.length) {
+                fileList.innerHTML = '<li>No files found.</li>';
+                return;
             }
-            li.innerHTML = `<a href="${url}" target="_blank">${file.name}</a>`;
-            fileList.appendChild(li);
-        });
+            data.files.forEach(file => {
+                const li = document.createElement('li');
+                let url = '#';
+                if (file.mimeType === 'application/vnd.google-apps.folder') {
+                    url = `https://drive.google.com/drive/folders/${file.id}`;
+                } else if (file.mimeType === 'application/vnd.google-apps.document') {
+                    url = `https://docs.google.com/document/d/${file.id}/edit`;
+                } else if (file.mimeType === 'application/vnd.google-apps.spreadsheet') {
+                    url = `https://docs.google.com/spreadsheets/d/${file.id}/edit`;
+                } else {
+                    url = `https://drive.google.com/file/d/${file.id}/view`;
+                }
+                li.innerHTML = `<a href="${url}" target="_blank">${file.name}</a>`;
+                fileList.appendChild(li);
+            });
+        } catch (err) {
+            fileList.innerHTML = '<li>Error loading files.</li>';
+        }
     }
 
     // Add quick note functionality
@@ -62,37 +75,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Disable form until log doc is loaded
     quickNoteForm.querySelectorAll('textarea, button').forEach(el => el.disabled = true);
 
-    // Helper to get the worker log doc id for the selected project
+    // Helper to get the worker log doc id for the selected Workers folder
     async function fetchWorkerLogDocId(workersFolderId) {
-        // 1. Find the subfolder for the current worker inside the selected Workers folder
-        // We'll use the user's email (from /user endpoint) to match the subfolder
-        let userEmail = '';
+        // Look for the log doc directly in the selected folder
+        if (!workersFolderId) return null;
         try {
-            const userRes = await fetch('/user');
-            const userData = await userRes.json();
-            userEmail = userData.email || '';
-            console.log('User email:', userEmail);
-        } catch {}
-        if (!userEmail) return null;
-        const workerName = userEmail.split('@')[0];
-        // 2. List subfolders in the Workers folder
-        const subRes = await fetch(`/list-project-files?folderId=${workersFolderId}`);
-        const subData = await subRes.json();
-        const mySubfolder = subData.files.find(f => f.mimeType === 'application/vnd.google-apps.folder' && f.name && f.name.includes(workerName));
-        if (!mySubfolder) return null;
-        // 3. Find the log doc in the subfolder
-        const docRes = await fetch(`/list-project-files?folderId=${mySubfolder.id}`);
-        const docData = await docRes.json();
-        const logDoc = docData.files.find(f => f.name && f.name.endsWith('log') && f.mimeType === 'application/vnd.google-apps.document');
-        return logDoc ? logDoc.id : null;
+            const docRes = await fetch(`/list-project-files?folderId=${workersFolderId}`);
+            const docData = await docRes.json();
+            if (!docData.files || !Array.isArray(docData.files)) return null;
+            const logDoc = docData.files.find(f => f.name && f.name.endsWith('log') && f.mimeType === 'application/vnd.google-apps.document');
+            return logDoc ? logDoc.id : null;
+        } catch {
+            return null;
+        }
     }
 
     async function enableQuickNoteFormIfReady() {
+        const elements = quickNoteForm.querySelectorAll('textarea, button');
         if (logDocId) {
-            quickNoteForm.querySelectorAll('textarea, button').forEach(el => el.disabled = false);
+            elements.forEach(el => el.disabled = false);
             noteResult.textContent = '';
         } else {
-            quickNoteForm.querySelectorAll('textarea, button').forEach(el => el.disabled = true);
+            elements.forEach(el => el.disabled = true);
             noteResult.textContent = 'Log document not found for this project.';
         }
     }
@@ -137,7 +141,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Update currentProjectId and logDocId on project change
     projectSelect.addEventListener('change', async e => {
         currentProjectId = e.target.value;
-        console.log(currentProjectId);
         await updateLogDocId(currentProjectId);
         loadWorkerFiles(currentProjectId);
     });
@@ -248,4 +251,32 @@ document.addEventListener('DOMContentLoaded', async () => {
             photoResult.textContent = 'Error uploading photo.';
         }
     };
+
+    // Add CSRF token to all fetch POST/PUT/DELETE requests
+    const originalFetch = window.fetch;
+    window.fetch = function(input, init = {}) {
+        if (init && (!init.method || ['POST','PUT','DELETE'].includes(init.method.toUpperCase()))) {
+            init.headers = init.headers || {};
+            // Try to get CSRF token from cookie or meta tag or ask backend for it
+            const csrfToken = window.localStorage.getItem('csrfToken') || document.querySelector('meta[name="csrf-token"]')?.content;
+            if (csrfToken) {
+                init.headers['x-csrf-token'] = csrfToken;
+            }
+        }
+        return originalFetch(input, init);
+    };
+    // On login, fetch and store CSRF token
+    fetch('/user').then(res => res.json()).then(data => {
+        if (data.csrfToken) {
+            window.localStorage.setItem('csrfToken', data.csrfToken);
+        }
+    });
+
+    // Global error and unhandledrejection handlers for robust error reporting
+    window.addEventListener('error', function(e) {
+        alert('A critical error occurred: ' + e.message);
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+        alert('A critical error occurred: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+    });
 });

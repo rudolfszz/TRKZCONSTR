@@ -1,3 +1,210 @@
+// Get recent emails from the manager's Gmail inbox (last 10)
+export const getManagerInboxEmails = async (req, res) => {
+    try {
+        const { getOAuth2Client } = await import('../services/googleService.js');
+        const oauth2Client = getOAuth2Client();
+        if (!req.session.user?.tokens) {
+            return res.status(401).json({ error: 'Not authenticated' });
+        }
+        oauth2Client.setCredentials(req.session.user.tokens);
+        const gmail = require('googleapis').google.gmail({ version: 'v1', auth: oauth2Client });
+        // Get the last 10 messages from the inbox
+        const messagesResp = await gmail.users.messages.list({ userId: 'me', maxResults: 10, labelIds: ['INBOX'] });
+        const messages = messagesResp.data.messages || [];
+        const emailResults = [];
+        for (const msg of messages) {
+            const msgData = await gmail.users.messages.get({ userId: 'me', id: msg.id, format: 'metadata', metadataHeaders: ['From', 'Subject', 'Date'] });
+            const headers = msgData.data.payload.headers;
+            const from = headers.find(h => h.name === 'From')?.value || '';
+            const subject = headers.find(h => h.name === 'Subject')?.value || '';
+            const date = headers.find(h => h.name === 'Date')?.value || '';
+            emailResults.push({ from, subject, date });
+        }
+        res.json({ emails: emailResults });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch Gmail inbox', details: err.message });
+    }
+};
+// Get recent emails (activity) for a project
+export const getRecentEmails = async (req, res) => {
+    const { projectId } = req.query;
+    try {
+        const drive = getDriveClient(req);
+        // Find the Docs folder inside the project
+        const docsFolderResp = await drive.files.list({
+            q: `'${projectId}' in parents and name contains 'Docs' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+            fields: 'files(id, name)',
+        });
+        if (!docsFolderResp.data.files.length) return res.json({ emails: [] });
+        const docsFolderId = docsFolderResp.data.files[0].id;
+        // Find the Workers folder inside the Docs folder
+        const workersFolderResp = await drive.files.list({
+            q: `'${docsFolderId}' in parents and name contains 'Workers' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+            fields: 'files(id, name)',
+        });
+        if (!workersFolderResp.data.files.length) return res.json({ emails: [] });
+        const workersFolderId = workersFolderResp.data.files[0].id;
+        // Get permissions (emails) for the workers folder
+        const perms = await drive.permissions.list({
+            fileId: workersFolderId,
+            fields: 'permissions(emailAddress,role,type)',
+        });
+        const emails = (perms.data.permissions || [])
+            .filter(p => p.type === 'user' && p.role === 'writer' && p.emailAddress)
+            .map(p => p.emailAddress);
+        res.json({ emails });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch recent emails', details: err.message });
+    }
+};
+
+// Get recent entries (notes) by workers for a project
+export const getRecentEntries = async (req, res) => {
+    const { projectId } = req.query;
+    try {
+        const drive = getDriveClient(req);
+        // Find the Docs folder inside the project
+        const docsFolderResp = await drive.files.list({
+            q: `'${projectId}' in parents and name contains 'Docs' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+            fields: 'files(id, name)',
+        });
+        if (!docsFolderResp.data.files.length) return res.json({ entries: [] });
+        const docsFolderId = docsFolderResp.data.files[0].id;
+        // Find the Workers folder inside the Docs folder
+        const workersFolderResp = await drive.files.list({
+            q: `'${docsFolderId}' in parents and name contains 'Workers' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+            fields: 'files(id, name)',
+        });
+        if (!workersFolderResp.data.files.length) return res.json({ entries: [] });
+        const workersFolderId = workersFolderResp.data.files[0].id;
+        // List all subfolders (workers)
+        const subfolders = await drive.files.list({
+            q: `'${workersFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+            fields: 'files(id, name)',
+        });
+        let entries = [];
+        for (const folder of subfolders.data.files) {
+            // Find log doc in subfolder
+            const docs = await drive.files.list({
+                q: `'${folder.id}' in parents and mimeType = 'application/vnd.google-apps.document' and name contains 'log' and trashed = false`,
+                fields: 'files(id, name)',
+            });
+            if (docs.data.files.length) {
+                // Get the latest content from the log doc (last 1-2 notes)
+                const { getOAuth2Client } = await import('../services/googleService.js');
+                const oauth2Client = getOAuth2Client();
+                oauth2Client.setCredentials(req.session.user.tokens);
+                const googleDocs = google.docs({ version: 'v1', auth: oauth2Client });
+                const doc = await googleDocs.documents.get({ documentId: docs.data.files[0].id });
+                const content = (doc.data.body && doc.data.body.content) ? doc.data.body.content.map(c => c.paragraph && c.paragraph.elements ? c.paragraph.elements.map(e => e.textRun ? e.textRun.content : '').join('') : '').join('') : '';
+                // Get last 2 notes (split by double newline)
+                const notes = content.split(/\n\n+/).filter(Boolean).slice(-2);
+                notes.forEach(note => entries.push({ worker: folder.name, note }));
+            }
+        }
+        // Sort by recency if possible (not guaranteed)
+        res.json({ entries: entries.reverse() });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch recent entries', details: err.message });
+    }
+};
+
+// Add a file (Doc, Sheet, Folder) to a project
+export const addFileToProject = async (req, res) => {
+    const { projectId, fileType, fileName } = req.body;
+    if (!projectId || !fileType || !fileName) return res.status(400).json({ error: 'Missing required fields' });
+    try {
+        const drive = getDriveClient(req);
+        // Find the correct parent folder
+        let parentFolderId = projectId;
+        if (fileType === 'document' || fileType === 'spreadsheet') {
+            // Find Docs or Sheets folder
+            const folderType = fileType === 'document' ? 'Docs' : 'Sheets';
+            const folderResp = await drive.files.list({
+                q: `'${projectId}' in parents and name contains '${folderType}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+                fields: 'files(id, name)',
+            });
+            if (!folderResp.data.files.length) return res.status(400).json({ error: `No ${folderType} folder found` });
+            parentFolderId = folderResp.data.files[0].id;
+        }
+        let resource = { name: fileName };
+        if (fileType === 'document') {
+            resource.mimeType = 'application/vnd.google-apps.document';
+        } else if (fileType === 'spreadsheet') {
+            resource.mimeType = 'application/vnd.google-apps.spreadsheet';
+        } else if (fileType === 'folder') {
+            resource.mimeType = 'application/vnd.google-apps.folder';
+        } else {
+            return res.status(400).json({ error: 'Invalid file type' });
+        }
+        resource.parents = [parentFolderId];
+        const file = await drive.files.create({ resource, fields: 'id, name' });
+        res.json({ success: true, file: { id: file.data.id, name: file.data.name } });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to add file', details: err.message });
+    }
+};
+
+// Add a note to the manager's personal doc (notepad)
+export const addManagerNote = async (req, res) => {
+    const { projectId, note } = req.body;
+    if (!projectId || !note) return res.status(400).json({ error: 'Missing projectId or note' });
+    try {
+        const drive = getDriveClient(req);
+        // Find Docs folder
+        const docsFolderResp = await drive.files.list({
+            q: `'${projectId}' in parents and name contains 'Docs' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+            fields: 'files(id, name)',
+        });
+        if (!docsFolderResp.data.files.length) return res.status(400).json({ error: 'No Docs folder found' });
+        const docsFolderId = docsFolderResp.data.files[0].id;
+        // Find Personal Docs folder
+        const personalDocsResp = await drive.files.list({
+            q: `'${docsFolderId}' in parents and name = 'My Docs' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+            fields: 'files(id, name)',
+        });
+        if (!personalDocsResp.data.files.length) return res.status(400).json({ error: 'No Personal Docs folder found' });
+        const personalDocsId = personalDocsResp.data.files[0].id;
+        // Find the personal doc
+        const docResp = await drive.files.list({
+            q: `'${personalDocsId}' in parents and mimeType = 'application/vnd.google-apps.document' and name = 'My Quick Notes' and trashed = false`,
+            fields: 'files(id, name)',
+        });
+        if (!docResp.data.files.length) return res.status(400).json({ error: 'No personal doc found' });
+        const docId = docResp.data.files[0].id;
+        // Add note to doc (append)
+        const { getOAuth2Client } = await import('../services/googleService.js');
+        const oauth2Client = getOAuth2Client();
+        oauth2Client.setCredentials(req.session.user.tokens);
+        const googleDocs = google.docs({ version: 'v1', auth: oauth2Client });
+        // Get current doc content to find end
+        const doc = await googleDocs.documents.get({ documentId: docId });
+        let endIndex = 1;
+        if (doc.data.body && doc.data.body.content && doc.data.body.content.length > 0) {
+            const last = doc.data.body.content[doc.data.body.content.length - 1];
+            if (last.endIndex) endIndex = last.endIndex - 1;
+        }
+        const now = new Date();
+        const dateStr = now.toLocaleString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const noteText = `${dateStr}\n${note}\n\n`;
+        await googleDocs.documents.batchUpdate({
+            documentId: docId,
+            requestBody: {
+                requests: [
+                    {
+                        insertText: {
+                            location: { index: endIndex },
+                            text: noteText
+                        }
+                    }
+                ]
+            }
+        });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to add note to personal doc', details: err.message });
+    }
+};
 import { getDriveClient } from '../services/googleService.js';
 import { google } from 'googleapis';
 import { Readable } from 'stream';
@@ -18,45 +225,78 @@ export const createProjectFolder = async (req, res) => {
         });
         const folderId = folder.data.id;
 
-        // 2. Create subfolders: Tables, Managers, Workers (add project name to Workers folder)
-        const subfolders = [
-            { name: 'Tables', key: 'tables' },
-            { name: 'Managers', key: 'managers' },
-            { name: `${name} Workers`, key: 'workers' } // Add project name to Workers folder
-        ];
-        const subfolderIds = {};
-        for (const sub of subfolders) {
-            const subMeta = {
-                name: sub.name,
-                mimeType: 'application/vnd.google-apps.folder',
-                parents: [folderId]
-            };
-            const subFolder = await drive.files.create({
-                resource: subMeta,
-                fields: 'id, name'
-            });
-            subfolderIds[sub.key] = subFolder.data.id;
-        }
-
-        // 3. In Tables folder, create a template sheet
-        const sheetMeta = {
-            name: `${name} Table Template`,
-            mimeType: 'application/vnd.google-apps.spreadsheet',
-            parents: [subfolderIds.tables]
+        // 2. Create subfolders: [projectName] Sheets, [projectName] Docs
+        const sheetsFolderMeta = {
+            name: `${name} Sheets`,
+            mimeType: 'application/vnd.google-apps.folder',
+            parents: [folderId]
         };
-        const sheetFile = await drive.files.create({
-            resource: sheetMeta,
+        const docsFolderMeta = {
+            name: `${name} Docs`,
+            mimeType: 'application/vnd.google-apps.folder',
+            parents: [folderId]
+        };
+        const sheetsFolder = await drive.files.create({
+            resource: sheetsFolderMeta,
+            fields: 'id, name'
+        });
+        const docsFolder = await drive.files.create({
+            resource: docsFolderMeta,
+            fields: 'id, name'
+        });
+        const sheetsFolderId = sheetsFolder.data.id;
+        const docsFolderId = docsFolder.data.id;
+
+        // 3. In Sheets folder, create two sheets: Auto Generating, Personal
+        const autoGenSheetMeta = {
+            name: 'Auto Generating',
+            mimeType: 'application/vnd.google-apps.spreadsheet',
+            parents: [sheetsFolderId]
+        };
+        const personalSheetMeta = {
+            name: 'My Sheet',
+            mimeType: 'application/vnd.google-apps.spreadsheet',
+            parents: [sheetsFolderId]
+        };
+        const autoGenSheet = await drive.files.create({
+            resource: autoGenSheetMeta,
+            fields: 'id, name'
+        });
+        const personalSheet = await drive.files.create({
+            resource: personalSheetMeta,
             fields: 'id, name'
         });
 
-        // 4. In Managers folder, create a template doc
-        const docMeta = {
-            name: `${name} Manager Template`,
-            mimeType: 'application/vnd.google-apps.document',
-            parents: [subfolderIds.managers]
+        // 4. In Docs folder, create [projectName] Workers folder and Personal folder
+        const workersFolderMeta = {
+            name: `${name} Workers`,
+            mimeType: 'application/vnd.google-apps.folder',
+            parents: [docsFolderId]
         };
-        const docFile = await drive.files.create({
-            resource: docMeta,
+        const personalDocsFolderMeta = {
+            name: 'My Docs',
+            mimeType: 'application/vnd.google-apps.folder',
+            parents: [docsFolderId]
+        };
+        const workersFolder = await drive.files.create({
+            resource: workersFolderMeta,
+            fields: 'id, name'
+        });
+        const personalDocsFolder = await drive.files.create({
+            resource: personalDocsFolderMeta,
+            fields: 'id, name'
+        });
+        const workersFolderId = workersFolder.data.id;
+        const personalDocsFolderId = personalDocsFolder.data.id;
+
+        // 5. In Personal Docs folder, create a doc called Personal
+        const personalDocMeta = {
+            name: 'My Quick Notes',
+            mimeType: 'application/vnd.google-apps.document',
+            parents: [personalDocsFolderId]
+        };
+        const personalDoc = await drive.files.create({
+            resource: personalDocMeta,
             fields: 'id, name'
         });
 
@@ -64,12 +304,18 @@ export const createProjectFolder = async (req, res) => {
             id: folderId,
             name: folder.data.name,
             subfolders: {
-                tables: { id: subfolderIds.tables, name: 'Tables' },
-                managers: { id: subfolderIds.managers, name: 'My files' },
-                workers: { id: subfolderIds.workers, name: 'Workers' }
+                sheets: { id: sheetsFolderId, name: `${name} Sheets` },
+                docs: { id: docsFolderId, name: `${name} Docs` },
+                workers: { id: workersFolderId, name: `${name} Workers` },
+                personalDocs: { id: personalDocsFolderId, name: 'My Docs' }
             },
-            tableSheet: { id: sheetFile.data.id, name: sheetFile.data.name },
-            managerDoc: { id: docFile.data.id, name: docFile.data.name }
+            sheets: {
+                autoGenerating: { id: autoGenSheet.data.id, name: autoGenSheet.data.name },
+                personal: { id: personalSheet.data.id, name: personalSheet.data.name }
+            },
+            docs: {
+                personal: { id: personalDoc.data.id, name: personalDoc.data.name }
+            }
         });
     } catch (err) {
         res.status(500).json({ error: 'Failed to create folder structure and templates' });
@@ -112,17 +358,43 @@ export const getWorkerFolderId = async (req, res) => {
     if (!projectId) return res.status(400).json({ error: 'Missing projectId' });
     try {
         const drive = getDriveClient(req);
-        const response = await drive.files.list({
-            q: `'${projectId}' in parents and name contains 'Workers' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+        // 1. Find the Docs folder inside the project
+        const docsFolderResp = await drive.files.list({
+            q: `'${projectId}' in parents and name contains 'Docs' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
             fields: 'files(id, name)',
         });
-        if (response.data.files.length > 0) {
-            res.json({ workerFolderId: response.data.files[0].id });
+        if (!docsFolderResp.data.files.length) {
+            return res.status(404).json({ error: 'No Docs folder found for project' });
+        }
+        const docsFolderId = docsFolderResp.data.files[0].id;
+        // 2. Find the Workers folder inside the Docs folder (match exact name)
+        const workersFolderResp = await drive.files.list({
+            q: `'${docsFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+            fields: 'files(id, name)',
+        });
+        if (!workersFolderResp.data.files.length) {
+            return res.status(404).json({ error: 'No Workers folder found in Docs' });
+        }
+        // Try to match exact name '[projectName] Workers'
+        let projectName = '';
+        try {
+            const parentFolder = await drive.files.get({ fileId: projectId, fields: 'name' });
+            projectName = parentFolder.data.name;
+        } catch (e) {
+            projectName = '';
+        }
+        let workersFolder = workersFolderResp.data.files.find(f => f.name === `${projectName} Workers`);
+        if (!workersFolder) {
+            // fallback: match any folder with 'Workers' in the name
+            workersFolder = workersFolderResp.data.files.find(f => f.name && f.name.includes('Workers'));
+        }
+        if (workersFolder) {
+            res.json({ workerFolderId: workersFolder.id });
         } else {
-            res.json({ workerFolderId: null });
+            return res.status(404).json({ error: 'No matching Workers folder found for project' });
         }
     } catch (err) {
-        res.status(500).json({ error: 'Failed to get worker folder id' });
+        res.status(500).json({ error: 'Failed to get worker folder id', details: err.message });
     }
 };
 
@@ -131,34 +403,51 @@ export const shareWorkerFolder = async (req, res) => {
     if (!req.session.user || !req.session.user.tokens) {
         return res.status(401).json({ error: 'Not authenticated. Please log in as a manager.' });
     }
-    const { folderId, email } = req.body;
-    if (!folderId || !email) return res.status(400).json({ error: 'Missing folderId or email' });
+    const { projectId, email, firstName, surname } = req.body;
+    if (!projectId || !email || !firstName || !surname) return res.status(400).json({ error: 'Missing projectId, email, first name, or surname' });
     try {
-        // Debug: log session contents for troubleshooting
-        console.log('Session at shareWorkerFolder:', req.session);
+        // Do NOT store firstName and surname in session globally (fix cross-project bug)
         const drive = getDriveClient(req);
-        // 1. Create a subfolder for the worker (projectName-workerName)
-        const workerName = email.split('@')[0];
-        // Fetch the project name for this worker folder
+        // 1. Find the Docs folder inside the project
+        const docsFolderResp = await drive.files.list({
+            q: `'${projectId}' in parents and name contains 'Docs' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+            fields: 'files(id, name)',
+        });
+        if (!docsFolderResp.data.files.length) {
+            return res.status(400).json({ error: 'Docs folder not found for project' });
+        }
+        const docsFolderId = docsFolderResp.data.files[0].id;
+        // 2. Find the Workers folder inside the Docs folder
+        const workersFolderResp = await drive.files.list({
+            q: `'${docsFolderId}' in parents and name contains 'Workers' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+            fields: 'files(id, name)',
+        });
+        if (!workersFolderResp.data.files.length) {
+            return res.status(400).json({ error: 'Workers folder not found in Docs' });
+        }
+        const workersFolderId = workersFolderResp.data.files[0].id;
+        // 3. Create a subfolder for the worker (projectName-workerName)
+        // Use firstName and surname for the worker folder and log doc name
         let projectName = '';
         try {
-            const parentFolder = await drive.files.get({ fileId: folderId, fields: 'name' });
+            const parentFolder = await drive.files.get({ fileId: projectId, fields: 'name' });
             projectName = parentFolder.data.name;
         } catch (e) {
             projectName = '';
         }
+        const workerFullName = `${firstName} ${surname}`.trim();
         const workerFolderMeta = {
-            name: `${projectName}-${workerName}`,
+            name: `${projectName}-${workerFullName}`,
             mimeType: 'application/vnd.google-apps.folder',
-            parents: [folderId]
+            parents: [workersFolderId]
         };
         const workerFolder = await drive.files.create({
             resource: workerFolderMeta,
             fields: 'id, name'
         });
-        // 2. Create a template Google Doc for the worker log
+        // 4. Create a template Google Doc for the worker log
         const docMeta = {
-            name: `${projectName} ${workerName} log`,
+            name: `${projectName} ${workerFullName} log`,
             mimeType: 'application/vnd.google-apps.document',
             parents: [workerFolder.data.id]
         };
@@ -166,9 +455,9 @@ export const shareWorkerFolder = async (req, res) => {
             resource: docMeta,
             fields: 'id, name'
         });
-        // 3. Share the worker folder and log doc with the user
+        // 5. Share the worker folder and log doc with the user
         await drive.permissions.create({
-            fileId: folderId,
+            fileId: workersFolderId,
             resource: {
                 type: 'user',
                 role: 'writer',
@@ -196,7 +485,6 @@ export const shareWorkerFolder = async (req, res) => {
         });
         res.json({ success: true, workerFolderId: workerFolder.data.id, logDocId: docFile.data.id });
     } catch (err) {
-        console.error('Failed to share worker folder:', err);
         res.status(500).json({ error: 'Failed to share folder, create worker subfolder, or log doc', details: err.message });
     }
 };
@@ -205,35 +493,51 @@ export const shareWorkerFolder = async (req, res) => {
 export const listAccessibleWorkerFolders = async (req, res) => {
     try {
         const drive = getDriveClient(req);
-        // List all folders shared with the user that have 'Workers' in the name
-        const response = await drive.files.list({
-            q: "mimeType='application/vnd.google-apps.folder' and name contains 'Workers' and trashed=false and sharedWithMe=true",
+        // List all folders shared with the user that are not trashed and are folders
+        const sharedFoldersResp = await drive.files.list({
+            q: "mimeType='application/vnd.google-apps.folder' and trashed=false and sharedWithMe=true",
             fields: 'files(id, name, parents)',
         });
-        // Optionally, fetch the parent project folder name for display
-        const folders = response.data.files;
-        for (const folder of folders) {
-            if (folder.parents && folder.parents.length) {
-                const parent = await drive.files.get({ fileId: folder.parents[0], fields: 'id, name' });
-                folder.projectName = parent.data.name;
+        const sharedFolders = sharedFoldersResp.data.files;
+        let resultFolders = [];
+        for (const folder of sharedFolders) {
+            // Only include subfolders (worker-specific) that contain a log doc
+            if (folder.name && folder.name.match(/-.+/)) {
+                // Check if this folder contains a log doc
+                const filesResp = await drive.files.list({
+                    q: `'${folder.id}' in parents and mimeType='application/vnd.google-apps.document' and name contains 'log' and trashed=false`,
+                    fields: 'files(id, name)',
+                });
+                if (filesResp.data.files && filesResp.data.files.length > 0) {
+                    // Try to find the project name by traversing up to the project root
+                    let projectName = '';
+                    let currentParent = folder.parents && folder.parents[0];
+                    for (let i = 0; i < 3 && currentParent; i++) { // Traverse up to 3 levels
+                        try {
+                            const parentResp = await drive.files.get({ fileId: currentParent, fields: 'id, name, parents' });
+                            if (parentResp.data.name && !parentResp.data.name.includes('Docs') && !parentResp.data.name.includes('Workers')) {
+                                projectName = parentResp.data.name;
+                                break;
+                            }
+                            currentParent = parentResp.data.parents && parentResp.data.parents[0];
+                        } catch { break; }
+                    }
+                    folder.projectName = projectName || folder.name;
+                    folder.displayName = folder.projectName;
+                    resultFolders.push(folder);
+                }
             }
         }
         // Remove duplicate folders by id
         const uniqueFolders = [];
         const seen = new Set();
-        for (const folder of folders) {
+        for (const folder of resultFolders) {
             if (!seen.has(folder.id)) {
                 uniqueFolders.push(folder);
                 seen.add(folder.id);
             }
         }
-        // Only keep the main Workers folder (not subfolders for each worker)
-        const mainFolders = uniqueFolders.filter(folder => {
-            // The main Workers folder should have a name containing 'Workers' but not the worker's name (no dash or @)
-            // You may adjust this logic if your naming changes
-            return !folder.name.match(/-.+/);
-        });
-        res.json({ folders: mainFolders });
+        res.json({ folders: uniqueFolders });
     } catch (err) {
         res.status(500).json({ error: 'Failed to list accessible worker folders' });
     }
@@ -281,7 +585,6 @@ export const addWorkerNote = async (req, res) => {
         });
         res.json({ success: true });
     } catch (err) {
-        console.error('Failed to add note to log document:', err);
         res.status(500).json({ error: 'Failed to add note to log document', details: err.message });
     }
 };
@@ -296,20 +599,43 @@ export const uploadWorkerPhoto = async (req, res) => {
         const { projectId } = req.body;
         if (!projectId) return res.status(400).json({ error: 'Project ID required' });
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+        if (!req.file.mimetype.startsWith('image/')) {
+            return res.status(400).json({ error: 'Invalid or missing image file' });
+        }
+
+        // Find the Docs folder inside the project
+        const docsFolderResp = await drive.files.list({
+            q: `'${projectId}' in parents and name contains 'Docs' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+            fields: 'files(id, name)',
+        });
+        if (!docsFolderResp.data.files.length) {
+            return res.status(400).json({ error: 'Docs folder not found for project' });
+        }
+        const docsFolderId = docsFolderResp.data.files[0].id;
+        // Find the Workers folder inside the Docs folder
+        const workersFolderResp = await drive.files.list({
+            q: `'${docsFolderId}' in parents and name contains 'Workers' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+            fields: 'files(id, name)',
+        });
+        if (!workersFolderResp.data.files.length) {
+            return res.status(400).json({ error: 'Workers folder not found in Docs' });
+        }
+        const workersFolderId = workersFolderResp.data.files[0].id;
 
         // Find the worker's subfolder in the Workers folder
         const userEmail = req.session.user.email;
         const workerName = userEmail.split('@')[0];
         // List subfolders in the Workers folder
         const subfolders = await drive.files.list({
-            q: `'${projectId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+            q: `'${workersFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
             fields: 'files(id, name)'
         });
-        // Debug log: list all subfolders found
-        console.log('Worker photo upload: subfolders found:', subfolders.data.files);
+        // Error handling: ensure subfolders were found
+        if (!subfolders.data.files || !Array.isArray(subfolders.data.files)) {
+            return res.status(500).json({ error: 'Internal error: subfolders list invalid' });
+        }
         const mySubfolder = subfolders.data.files.find(f => f.name && f.name.includes(workerName));
         if (!mySubfolder) {
-            console.error('Worker photo upload: subfolder not found for', workerName);
             return res.status(404).json({ error: 'Worker subfolder not found' });
         }
 
@@ -332,7 +658,6 @@ export const uploadWorkerPhoto = async (req, res) => {
         });
         res.json({ success: true });
     } catch (err) {
-        console.error('Worker photo upload error:', err);
         res.status(500).json({ error: 'Failed to upload photo', details: err.message });
     }
 };

@@ -17,10 +17,9 @@
         <select id="project-select"></select>
         <button id="go-to-selected-project" type="button">Go to Project</button>
     </div>
-    <div id="worker-access-section">
+    <div id="worker-access-section" style="display:none;">
         <h2>Share Worker Folder</h2>
-        <label for="worker-project-select">Select Project:</label>
-        <select id="worker-project-select"></select>
+        <!-- Project selection removed: project context is now implicit after creation -->
         <form id="add-worker-form">
             <input type="email" id="worker-email" placeholder="Worker Gmail" required />
             <button type="submit">Add Worker</button>

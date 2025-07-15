@@ -3,18 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manager Dashboard</title>
+    <title id="page-title">Manager Dashboard</title>
 </head>
 <body>
-    <h1>Manager Dashboard</h1>
+    <h1 id="dashboard-title">Manager Dashboard</h1>
+
     <div>
         <label for="project-select">Select Project:</label>
         <select id="project-select"></select>
     </div>
+
+    <section id="recent-emails-section">
+        <h2>Recent Emails</h2>
+        <ul id="recent-emails-list"></ul>
+    </section>
+
+    <section id="recent-entries-section">
+        <h2>Recent Entries by Workers</h2>
+        <ul id="recent-entries-list"></ul>
+    </section>
+
     <h2>Project Files & Folders</h2>
     <ul id="file-list"></ul>
+
+    <section id="add-file-section">
+        <h2>Add File to Project</h2>
+        <form id="add-file-form">
+            <select id="file-type-select" required>
+                <option value="document">Google Doc</option>
+                <option value="spreadsheet">Google Sheet</option>
+                <option value="folder">Folder</option>
+            </select>
+            <input type="text" id="new-file-name" placeholder="File/Folder Name" required />
+            <button type="submit">Add</button>
+        </form>
+        <div id="add-file-result"></div>
+    </section>
+
+    <section id="calendar-section">
+        <h2>Project Calendar</h2>
+        <!-- Google Calendar embed (public calendar or API integration) -->
+        <iframe id="google-calendar-frame" style="border: 0" width="100%" height="400" frameborder="0" scrolling="no"></iframe>
+    </section>
+
+    <section id="notepad-section">
+        <h2>Manager Notepad (Personal Docs)</h2>
+        <form id="notepad-form">
+            <textarea id="notepad-input" rows="4" style="width:100%" placeholder="Write a note..."></textarea>
+            <button type="submit">Save Note</button>
+        </form>
+        <div id="notepad-result"></div>
+    </section>
+
+    <div id="worker-access-section">
+        <h2>Add Worker to Project</h2>
+        <form id="add-worker-form">
+            <input type="email" id="worker-email" placeholder="Worker Gmail" required />
+            <input type="text" id="worker-name" placeholder="First Name" required />
+            <input type="text" id="worker-surname" placeholder="Surname" required />
+            <button type="submit">Add Worker</button>
+        </form>
+        <ul id="worker-list"></ul>
+        <div id="worker-share-result"></div>
+        <ul id="existing-worker-list"></ul>
+    </div>
+
     <button id="switch-to-worker-btn">Switch to Worker View</button>
     <button id="logout-btn">Log Out</button>
+    <a href="privacy.html" target="_blank" style="position:absolute;right:10px;top:10px;">Privacy Policy</a>
     <script src="managerSide.js"></script>
 </body>
 </html>
