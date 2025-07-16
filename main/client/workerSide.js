@@ -1,4 +1,8 @@
+import { initializeCommonFeatures } from './utils.js';
+
 document.addEventListener('DOMContentLoaded', async () => {
+    // Initialize common features (CSRF protection, error handlers)
+    initializeCommonFeatures();
     const projectSelect = document.getElementById('worker-project-select');
     const fileList = document.getElementById('worker-file-list');
     const infoDiv = document.getElementById('worker-info');
@@ -251,32 +255,4 @@ document.addEventListener('DOMContentLoaded', async () => {
             photoResult.textContent = 'Error uploading photo.';
         }
     };
-
-    // Add CSRF token to all fetch POST/PUT/DELETE requests
-    const originalFetch = window.fetch;
-    window.fetch = function(input, init = {}) {
-        if (init && (!init.method || ['POST','PUT','DELETE'].includes(init.method.toUpperCase()))) {
-            init.headers = init.headers || {};
-            // Try to get CSRF token from cookie or meta tag or ask backend for it
-            const csrfToken = window.localStorage.getItem('csrfToken') || document.querySelector('meta[name="csrf-token"]')?.content;
-            if (csrfToken) {
-                init.headers['x-csrf-token'] = csrfToken;
-            }
-        }
-        return originalFetch(input, init);
-    };
-    // On login, fetch and store CSRF token
-    fetch('/user').then(res => res.json()).then(data => {
-        if (data.csrfToken) {
-            window.localStorage.setItem('csrfToken', data.csrfToken);
-        }
-    });
-
-    // Global error and unhandledrejection handlers for robust error reporting
-    window.addEventListener('error', function(e) {
-        alert('A critical error occurred: ' + e.message);
-    });
-    window.addEventListener('unhandledrejection', function(e) {
-        alert('A critical error occurred: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
-    });
 });

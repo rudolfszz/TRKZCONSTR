@@ -1,6 +1,67 @@
+import { initializeCommonFeatures } from './utils.js';
+
+const customCalendarEventsList = document.getElementById('custom-calendar-events-list');
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // Initialize common features (CSRF protection, error handlers)
+    initializeCommonFeatures();
+    // --- Calendar Event Modal Logic (now inside main DOMContentLoaded for correct calendarId) ---
+    const openModalBtn = document.getElementById('open-calendar-event-modal-btn');
+    const modal = document.getElementById('calendar-event-modal');
+    const closeModalBtn = document.getElementById('close-calendar-event-modal-btn');
+    const form = document.getElementById('calendar-event-form');
+    const resultDiv = document.getElementById('calendar-event-result');
+    if (openModalBtn && modal && closeModalBtn && form) {
+        openModalBtn.onclick = () => {
+            modal.style.display = 'flex';
+            resultDiv.textContent = '';
+            form.reset();
+        };
+        closeModalBtn.onclick = () => {
+            modal.style.display = 'none';
+        };
+        modal.onclick = (e) => {
+            if (e.target === modal) modal.style.display = 'none';
+        };
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            resultDiv.textContent = 'Adding event...';
+            const title = document.getElementById('event-title').value.trim();
+            const description = document.getElementById('event-description').value.trim();
+            const location = document.getElementById('event-location').value.trim();
+            const start = document.getElementById('event-start').value;
+            const end = document.getElementById('event-end').value;
+            const notify = document.getElementById('event-notify').checked;
+            const projectName = projectSelect?.options[projectSelect.selectedIndex]?.textContent || '';
+            // Always use the correct calendarId for the selected project
+            const calendarId = findCalendarIdByProjectName(projectName);
+            if (!title || !start || !end) {
+                resultDiv.textContent = 'Please fill in all required fields.';
+                return;
+            }
+            try {
+                const res = await fetch('/api/calendar-add-event', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, description, start, end, location, notify, projectName, calendarId })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    resultDiv.innerHTML = 'Event added! <a href="' + data.htmlLink + '" target="_blank">View in Google Calendar</a>';
+                    form.reset();
+                    // Refresh event list after adding
+                    if (typeof fetchAndDisplayCalendarEvents === 'function') fetchAndDisplayCalendarEvents();
+                } else {
+                    resultDiv.textContent = data.error || 'Failed to add event.';
+                }
+            } catch (err) {
+                resultDiv.textContent = 'Error adding event.';
+            }
+        };
+    }
     const projectSelect = document.getElementById('project-select');
+    // No calendar dropdown: calendar is selected automatically by project
+    let calendarSelect = null;
     const fileList = document.getElementById('file-list');
     const workerForm = document.getElementById('add-worker-form');
     const workerEmailInput = document.getElementById('worker-email');
@@ -21,8 +82,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const notepadInput = document.getElementById('notepad-input');
     const notepadResult = document.getElementById('notepad-result');
     const calendarFrame = document.getElementById('google-calendar-frame');
+    const calendarStart = document.getElementById('calendar-start');
+    const calendarEnd = document.getElementById('calendar-end');
+    const calendarUpdateBtn = document.getElementById('calendar-update-btn');
     let addedWorkers = [];
     let existingWorkers = [];
+    let calendarList = [];
 
     // Add 'Create New Project' button if not present
     let createProjectBtn = document.getElementById('create-project-btn');
@@ -51,34 +116,57 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Fetch all project folders (assume they are top-level folders)
+    // Store projectId -> calendarId mapping
+    let projectCalendarMap = {};
+    function findCalendarIdByProjectName(name) {
+        const match = calendarList.find(cal => cal.summary === name);
+        return match ? match.id : (calendarList[0]?.id || 'primary');
+    }
+
     async function fetchProjects(selectedId) {
         try {
-            const res = await fetch('/list-project-folders');
-            const data = await res.json();
+            // Fetch folders and calendar mapping in parallel
+            const [foldersRes, calendarMapRes] = await Promise.all([
+                fetch('/list-project-folders'),
+                fetch('/api/project-calendar-map')
+            ]);
+            const foldersData = await foldersRes.json();
+            const calendarMapData = await calendarMapRes.json();
+            // foldersData.folders: [{id, name}], calendarMapData: { [projectId]: calendarId }
             projectSelect.innerHTML = '';
-            data.folders.forEach(folder => {
+            projectCalendarMap = calendarMapData || {};
+            foldersData.folders.forEach(folder => {
                 const option = document.createElement('option');
                 option.value = folder.id;
                 option.textContent = folder.name;
                 projectSelect.appendChild(option);
             });
             let projectName = '';
-            if (selectedId && data.folders.some(f => f.id === selectedId)) {
+            let calendarId = '';
+            // Fetch all calendars
+            const calRes = await fetch('/api/calendar-list');
+            const calData = await calRes.json();
+            calendarList = calData.items || [];
+            if (selectedId && foldersData.folders.some(f => f.id === selectedId)) {
                 projectSelect.value = selectedId;
-                projectName = data.folders.find(f => f.id === selectedId).name;
+                projectName = foldersData.folders.find(f => f.id === selectedId).name;
+                calendarId = findCalendarIdByProjectName(projectName);
+                // calendarSelect removed
                 loadProjectFiles(selectedId);
                 fetchAndDisplayExistingWorkers(selectedId);
                 fetchRecentEmails();
                 fetchRecentEntries(selectedId);
-                setCalendar(selectedId, projectName);
-            } else if (data.folders.length > 0) {
-                projectSelect.value = data.folders[0].id;
-                projectName = data.folders[0].name;
-                loadProjectFiles(data.folders[0].id);
-                fetchAndDisplayExistingWorkers(data.folders[0].id);
+                setCalendar(selectedId, projectName, calendarId);
+            } else if (foldersData.folders.length > 0) {
+                projectSelect.value = foldersData.folders[0].id;
+                projectName = foldersData.folders[0].name;
+                calendarId = findCalendarIdByProjectName(projectName);
+                // calendarSelect removed
+                loadProjectFiles(foldersData.folders[0].id);
+                fetchAndDisplayExistingWorkers(foldersData.folders[0].id);
                 fetchRecentEmails();
-                fetchRecentEntries(data.folders[0].id);
-                setCalendar(data.folders[0].id, projectName);
+                fetchRecentEntries(foldersData.folders[0].id);
+                setCalendar(foldersData.folders[0].id, projectName, calendarId);
             }
             setDashboardTitle(projectName);
         } catch (err) {
@@ -89,7 +177,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             projectSelect.appendChild(option);
         }
     }
-
+                // setCalendar(selectedId); // removed: handled above
     // Fetch and display recent emails (worker activity)
     // Fetch and display recent manager inbox emails
     async function fetchRecentEmails() {
@@ -116,21 +204,86 @@ document.addEventListener('DOMContentLoaded', async () => {
             const res = await fetch(`/api/recent-entries?projectId=${projectId}`);
             const data = await res.json();
             if (data.entries && data.entries.length) {
-                recentEntriesList.innerHTML = data.entries.map(e => `<li><b>${e.worker}:</b> ${e.note}</li>`).join('');
+                // Filter out entries with empty or placeholder notes
+                const filtered = data.entries.filter(e => e.note && e.note.trim() !== '' && e.note.trim() !== ':');
+                if (filtered.length) {
+                    recentEntriesList.innerHTML = filtered.map(e => `<li><b>${e.worker}:</b> ${e.note}</li>`).join('');
+                    recentEntriesList.style.display = '';
+                    if (recentEntriesList.parentElement) recentEntriesList.parentElement.style.display = '';
+                } else {
+                    recentEntriesList.innerHTML = '';
+                    recentEntriesList.style.display = 'none';
+                    if (recentEntriesList.parentElement) recentEntriesList.parentElement.style.display = 'none';
+                }
             } else {
-                recentEntriesList.innerHTML = '<li>No recent entries.</li>';
+                recentEntriesList.innerHTML = '';
+                recentEntriesList.style.display = 'none';
+                if (recentEntriesList.parentElement) recentEntriesList.parentElement.style.display = 'none';
             }
         } catch {
-            recentEntriesList.innerHTML = '<li>Error loading entries.</li>';
+            recentEntriesList.innerHTML = '';
+            recentEntriesList.style.display = 'none';
+            if (recentEntriesList.parentElement) recentEntriesList.parentElement.style.display = 'none';
         }
     }
 
     // Set Google Calendar iframe (public calendar for now)
-    function setCalendar(projectId, projectName) {
+    function setCalendar(projectId, projectName, calendarId) {
         if (!calendarFrame) return;
-        // You can replace the src below with a project-specific calendar if available
-        calendarFrame.src = 'https://calendar.google.com/calendar/embed?src=en.latvian%23holiday%40group.v.calendar.google.com&ctz=Europe%2FRiga';
+        // Always use the calendarId for the project
+        const calId = calendarId || (projectCalendarMap[projectId] || 'primary');
+        let src = `https://calendar.google.com/calendar/embed?src=${encodeURIComponent(calId)}&ctz=Europe/Riga`;
+        if (calendarStart && calendarEnd && calendarStart.value && calendarEnd.value) {
+            src += `#from=${calendarStart.value}&to=${calendarEnd.value}`;
+        }
+        calendarFrame.src = src;
     }
+
+    // Set default dates to today and +7 days
+    function setDefaultCalendarDates() {
+        if (calendarStart && calendarEnd) {
+            const today = new Date();
+            const weekLater = new Date();
+            weekLater.setDate(today.getDate() + 7);
+            calendarStart.value = today.toISOString().slice(0, 10);
+            calendarEnd.value = weekLater.toISOString().slice(0, 10);
+        }
+    }
+
+    async function fetchAndDisplayCalendarEvents() {
+        // Use selected calendar from dropdown
+        const projectId = projectSelect?.value;
+        const projectName = projectSelect?.options[projectSelect.selectedIndex]?.textContent || '';
+        const calendarId = findCalendarIdByProjectName(projectName);
+        setCalendar(projectId, projectName, calendarId);
+        if (calendarStart && calendarEnd && customCalendarEventsList) {
+            customCalendarEventsList.innerHTML = 'Loading...';
+            try {
+                const res = await fetch(`/api/calendar-events?calendarId=${encodeURIComponent(calendarId)}&start=${calendarStart.value}&end=${calendarEnd.value}`);
+                const data = await res.json();
+                if (data.events && data.events.length) {
+                    customCalendarEventsList.innerHTML = data.events.map(ev =>
+                        `<li><b>${ev.summary || '(No Title)'}</b><br>
+                        ${ev.start ? 'From: ' + new Date(ev.start).toLocaleString() : ''}<br>
+                        ${ev.end ? 'To: ' + new Date(ev.end).toLocaleString() : ''}<br>
+                        ${ev.location ? 'Location: ' + ev.location + '<br>' : ''}
+                        ${ev.description ? '<span style="color:gray">' + ev.description + '</span>' : ''}
+                        </li>`
+                    ).join('');
+                } else {
+                    customCalendarEventsList.innerHTML = '<li>No events found for this range.</li>';
+                }
+            } catch {
+                customCalendarEventsList.innerHTML = '<li>Error loading events.</li>';
+            }
+        }
+    }
+
+    if (calendarUpdateBtn) {
+        calendarUpdateBtn.onclick = fetchAndDisplayCalendarEvents;
+    }
+    // No calendar dropdown event
+    // (Removed duplicate DOMContentLoaded block)
 
     // Fetch files/folders for a project
     async function loadProjectFiles(folderId) {
@@ -267,6 +420,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     projectSelect.addEventListener('change', e => {
         const projectId = e.target.value;
         const projectName = projectSelect.options[projectSelect.selectedIndex]?.textContent || '';
+        // Auto-select calendar with the same name as the project, or fallback
+        const match = calendarList.find(cal => cal.summary === projectName);
+        const calendarId = match ? match.id : (calendarList[0]?.id || 'primary');
+        calendarSelect.value = calendarId;
         loadProjectFiles(projectId);
         addedWorkers = [];
         renderWorkerList();
@@ -274,7 +431,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         fetchRecentEmails();
         fetchRecentEntries(projectId);
         setDashboardTitle(projectName);
-        setCalendar(projectId, projectName);
+        setCalendar(projectId, projectName, calendarId);
     });
     // Add file to project
     if (addFileForm) {
@@ -339,8 +496,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // On load, check for projectId in URL
+    setDefaultCalendarDates();
     const projectId = getProjectIdFromUrl();
-    fetchProjects(projectId);
+    // Fetch projects, then set the calendar iframe for the current project
+    fetchProjects(projectId).then(() => {
+        // After projects are loaded, set the calendar iframe for the selected project
+        const currentProjectId = projectSelect.value;
+        const currentProjectName = projectSelect.options[projectSelect.selectedIndex]?.textContent || '';
+        const currentCalendarId = projectCalendarMap[currentProjectId] || 'primary';
+        setCalendar(currentProjectId, currentProjectName, currentCalendarId);
+        // Always fetch calendar events on load
+        setTimeout(fetchAndDisplayCalendarEvents, 500);
+    });
 
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) {
@@ -355,29 +522,4 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.location.href = 'workerSide.html';
         };
     }
-
-    // Add CSRF token to all fetch POST/PUT/DELETE requests
-    const originalFetch = window.fetch;
-    window.fetch = function(input, init = {}) {
-        if (init && (!init.method || ['POST','PUT','DELETE'].includes(init.method.toUpperCase()))) {
-            init.headers = init.headers || {};
-            const csrfToken = window.localStorage.getItem('csrfToken') || document.querySelector('meta[name="csrf-token"]')?.content;
-            if (csrfToken) {
-                init.headers['x-csrf-token'] = csrfToken;
-            }
-        }
-        return originalFetch(input, init);
-    };
-    fetch('/user').then(res => res.json()).then(data => {
-        if (data.csrfToken) {
-            window.localStorage.setItem('csrfToken', data.csrfToken);
-        }
-    });
-});
-
-window.addEventListener('error', function(e) {
-    alert('A critical error occurred: ' + e.message);
-});
-window.addEventListener('unhandledrejection', function(e) {
-    alert('A critical error occurred: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
 });

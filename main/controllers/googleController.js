@@ -1,16 +1,216 @@
+// Returns a map of { [projectId]: calendarId } for all projects
+import * as db from '../services/googleService.js';
+import { 
+    getCalendarClient, 
+    getGmailClient, 
+    getDocsClient, 
+    getDriveClient 
+} from '../services/googleUtils.js';
+import { google } from 'googleapis';
+export const getProjectCalendarMap = async (req, res) => {
+    try {
+        // You may need to adjust this logic to match your data storage
+        // Example: Assume you have a function getAllProjectCalendarMappings()
+        // that returns { [projectId]: calendarId }
+        if (typeof db.getAllProjectCalendarMappings === 'function') {
+            const map = await db.getAllProjectCalendarMappings();
+            return res.json(map);
+        }
+        // Fallback: If you store mapping in a file or memory, load it here
+        // Example: import map from '../data/projectCalendarMap.json' assert { type: 'json' };
+        // return res.json(map);
+        return res.json({});
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to get project calendar map' });
+    }
+};
+// Create a new Google Calendar
+export const createCalendar = async (req, res) => {
+    try {
+        const { summary } = req.body;
+        if (!summary) return res.status(400).json({ error: 'Missing calendar name' });
+        
+        const calendarApi = getCalendarClient(req);
+        const calendarResp = await calendarApi.calendars.insert({ requestBody: { summary } });
+        
+        // Add to user's calendar list
+        try {
+            await calendarApi.calendarList.insert({ requestBody: { id: calendarResp.data.id } });
+        } catch (e) {}
+        
+        res.json({ success: true, calendarId: calendarResp.data.id });
+    } catch (err) {
+        if (err.message === 'Not authenticated') {
+            return res.status(401).json({ error: 'Not authenticated' });
+        }
+        res.status(500).json({ error: 'Failed to create calendar', details: err.message });
+    }
+};
+
+// Delete a Google Calendar
+export const deleteCalendar = async (req, res) => {
+    try {
+        const { calendarId } = req.body;
+        if (!calendarId) return res.status(400).json({ error: 'Missing calendarId' });
+        
+        const calendarApi = getCalendarClient(req);
+        await calendarApi.calendars.delete({ calendarId });
+        
+        res.json({ success: true });
+    } catch (err) {
+        if (err.message === 'Not authenticated') {
+            return res.status(401).json({ error: 'Not authenticated' });
+        }
+        res.status(500).json({ error: 'Failed to delete calendar', details: err.message });
+    }
+};
+// List user's calendars
+export const getCalendarList = async (req, res) => {
+    try {
+        const calendar = getCalendarClient(req);
+        const resp = await calendar.calendarList.list();
+        console.log('[getCalendarList] Google API response:', JSON.stringify(resp.data, null, 2));
+        const items = (resp.data.items || []).map(cal => ({
+            id: cal.id,
+            summary: cal.summary,
+            primary: !!cal.primary
+        }));
+        console.log('[getCalendarList] Calendars returned:', items);
+        res.json({ items });
+    } catch (err) {
+        if (err.message === 'Not authenticated') {
+            console.error('[getCalendarList] Not authenticated');
+            return res.status(401).json({ error: 'Not authenticated' });
+        }
+        console.error('[getCalendarList] Error:', err);
+        res.status(500).json({ error: 'Failed to fetch calendar list', details: err.message });
+    }
+};
+// Add a Google Calendar event for the authenticated user
+export const addCalendarEvent = async (req, res) => {
+    try {
+        let { title, description, start, end, location, notify, projectName, calendarId } = req.body;
+        if (!title || !start || !end) {
+            return res.status(400).json({ error: 'Missing required fields: title, start, end' });
+        }
+        
+        const calendar = getCalendarClient(req);
+        const event = {
+            summary: title,
+            description: description || '',
+            start: { dateTime: new Date(start).toISOString() },
+            end: { dateTime: new Date(end).toISOString() },
+            location: location || '',
+            extendedProperties: {
+                private: {
+                    projectName: projectName || ''
+                }
+            }
+        };
+        
+        if (notify) {
+            event.reminders = {
+                useDefault: false,
+                overrides: [
+                    { method: 'email', minutes: 30 },
+                    { method: 'popup', minutes: 10 }
+                ]
+            };
+        }
+        
+        // Use projectName as calendarId if provided, fallback to 'primary'
+        if (!calendarId && projectName) calendarId = projectName;
+        const response = await calendar.events.insert({
+            calendarId: calendarId || 'primary',
+            resource: event,
+        });
+        
+        res.json({ success: true, eventId: response.data.id, htmlLink: response.data.htmlLink });
+    } catch (err) {
+        if (err.message === 'Not authenticated') {
+            return res.status(401).json({ error: 'Not authenticated' });
+        }
+        res.status(500).json({ error: 'Failed to add calendar event', details: err.message });
+    }
+};
+// Get Google Calendar events for a date range
+export const getCalendarEvents = async (req, res) => {
+    try {
+        let { start, end, projectName, calendarId } = req.query;
+        if (!start || !end) {
+            console.error('[getCalendarEvents] Missing start or end', { start, end });
+            return res.status(400).json({ error: 'Missing start or end' });
+        }
+        
+        const calendar = getCalendarClient(req);
+        
+        // Build query params
+        // Use projectName as calendarId if provided, fallback to 'primary'
+        if (!calendarId && projectName) calendarId = projectName;
+        let query = {
+            calendarId: calendarId || 'primary',
+            timeMin: new Date(start).toISOString(),
+            timeMax: new Date(end).toISOString(),
+            singleEvents: true,
+            orderBy: 'startTime',
+            maxResults: 100
+        };
+        if (projectName) {
+            query.privateExtendedProperty = `projectName=${projectName}`;
+        }
+        console.log('[getCalendarEvents] Query:', query);
+        try {
+            // Try to fetch events from the specified calendarId
+            let eventsResp;
+            try {
+                eventsResp = await calendar.events.list(query);
+            } catch (apiErr) {
+                // If calendar not found, fallback to 'primary' and notify client
+                if (apiErr && apiErr.response && apiErr.response.data && apiErr.response.data.error && apiErr.response.data.error.code === 404) {
+                    query.calendarId = 'primary';
+                    eventsResp = await calendar.events.list(query);
+                    return res.json({ events: (eventsResp.data.items || []).map(ev => ({
+                        id: ev.id,
+                        summary: ev.summary,
+                        description: ev.description,
+                        start: ev.start?.dateTime || ev.start?.date,
+                        end: ev.end?.dateTime || ev.end?.date,
+                        location: ev.location,
+                        projectName: ev.extendedProperties?.private?.projectName || ''
+                    })), fallback: true, message: 'Project calendar not found, showing primary calendar.' });
+                } else {
+                    throw apiErr;
+                }
+            }
+            const events = (eventsResp.data.items || []).map(ev => ({
+                id: ev.id,
+                summary: ev.summary,
+                description: ev.description,
+                start: ev.start?.dateTime || ev.start?.date,
+                end: ev.end?.dateTime || ev.end?.date,
+                location: ev.location,
+                projectName: ev.extendedProperties?.private?.projectName || ''
+            }));
+            console.log('[getCalendarEvents] Events returned:', events);
+            res.json({ events });
+        } catch (apiErr) {
+            console.error('[getCalendarEvents] Google API error:', apiErr.response?.data || apiErr.message);
+            res.status(500).json({ error: 'Failed to fetch calendar events', details: apiErr.message, apiError: apiErr.response?.data });
+        }
+    } catch (err) {
+        console.error('[getCalendarEvents] Error:', err);
+        res.status(500).json({ error: 'Failed to fetch calendar events', details: err.message });
+    }
+};
 // Get recent emails from the manager's Gmail inbox (last 10)
 export const getManagerInboxEmails = async (req, res) => {
     try {
-        const { getOAuth2Client } = await import('../services/googleService.js');
-        const oauth2Client = getOAuth2Client();
-        if (!req.session.user?.tokens) {
-            return res.status(401).json({ error: 'Not authenticated' });
-        }
-        oauth2Client.setCredentials(req.session.user.tokens);
-        const gmail = require('googleapis').google.gmail({ version: 'v1', auth: oauth2Client });
+        const gmail = getGmailClient(req);
+        
         // Get the last 10 messages from the inbox
         const messagesResp = await gmail.users.messages.list({ userId: 'me', maxResults: 10, labelIds: ['INBOX'] });
         const messages = messagesResp.data.messages || [];
+        
         const emailResults = [];
         for (const msg of messages) {
             const msgData = await gmail.users.messages.get({ userId: 'me', id: msg.id, format: 'metadata', metadataHeaders: ['From', 'Subject', 'Date'] });
@@ -20,8 +220,12 @@ export const getManagerInboxEmails = async (req, res) => {
             const date = headers.find(h => h.name === 'Date')?.value || '';
             emailResults.push({ from, subject, date });
         }
+        
         res.json({ emails: emailResults });
     } catch (err) {
+        if (err.message === 'Not authenticated') {
+            return res.status(401).json({ error: 'Not authenticated' });
+        }
         res.status(500).json({ error: 'Failed to fetch Gmail inbox', details: err.message });
     }
 };
@@ -91,10 +295,7 @@ export const getRecentEntries = async (req, res) => {
             });
             if (docs.data.files.length) {
                 // Get the latest content from the log doc (last 1-2 notes)
-                const { getOAuth2Client } = await import('../services/googleService.js');
-                const oauth2Client = getOAuth2Client();
-                oauth2Client.setCredentials(req.session.user.tokens);
-                const googleDocs = google.docs({ version: 'v1', auth: oauth2Client });
+                const googleDocs = getDocsClient(req);
                 const doc = await googleDocs.documents.get({ documentId: docs.data.files[0].id });
                 const content = (doc.data.body && doc.data.body.content) ? doc.data.body.content.map(c => c.paragraph && c.paragraph.elements ? c.paragraph.elements.map(e => e.textRun ? e.textRun.content : '').join('') : '').join('') : '';
                 // Get last 2 notes (split by double newline)
@@ -173,10 +374,8 @@ export const addManagerNote = async (req, res) => {
         if (!docResp.data.files.length) return res.status(400).json({ error: 'No personal doc found' });
         const docId = docResp.data.files[0].id;
         // Add note to doc (append)
-        const { getOAuth2Client } = await import('../services/googleService.js');
-        const oauth2Client = getOAuth2Client();
-        oauth2Client.setCredentials(req.session.user.tokens);
-        const googleDocs = google.docs({ version: 'v1', auth: oauth2Client });
+        const googleDocs = getDocsClient(req);
+        
         // Get current doc content to find end
         const doc = await googleDocs.documents.get({ documentId: docId });
         let endIndex = 1;
@@ -184,9 +383,11 @@ export const addManagerNote = async (req, res) => {
             const last = doc.data.body.content[doc.data.body.content.length - 1];
             if (last.endIndex) endIndex = last.endIndex - 1;
         }
+        
         const now = new Date();
         const dateStr = now.toLocaleString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
         const noteText = `${dateStr}\n${note}\n\n`;
+        
         await googleDocs.documents.batchUpdate({
             documentId: docId,
             requestBody: {
@@ -224,6 +425,31 @@ export const createProjectFolder = async (req, res) => {
             fields: 'id, name',
         });
         const folderId = folder.data.id;
+
+        // 1b. Create a new Google Calendar for this project (named after the project)
+        let projectCalendarId = null;
+        try {
+            const calendarApi = getCalendarClient(req);
+            
+            // Create the calendar
+            const calendarResp = await calendarApi.calendars.insert({ requestBody: { summary: name } });
+            projectCalendarId = calendarResp.data.id;
+            
+            // Add to user's calendar list
+            try {
+                await calendarApi.calendarList.insert({ requestBody: { id: projectCalendarId } });
+            } catch (e) {}
+            
+            // Make the calendar public so it can be embedded
+            try {
+                const { setCalendarPublicOrShare } = await import('../services/calendarAclUtil.js');
+                await setCalendarPublicOrShare(projectCalendarId);
+            } catch (err) {
+                console.error('[createProjectFolder] Failed to set calendar public:', err);
+            }
+        } catch (err) {
+            console.error('[createProjectFolder] Failed to create project calendar:', err);
+        }
 
         // 2. Create subfolders: [projectName] Sheets, [projectName] Docs
         const sheetsFolderMeta = {
@@ -303,6 +529,7 @@ export const createProjectFolder = async (req, res) => {
         res.json({
             id: folderId,
             name: folder.data.name,
+            calendarId: projectCalendarId,
             subfolders: {
                 sheets: { id: sheetsFolderId, name: `${name} Sheets` },
                 docs: { id: docsFolderId, name: `${name} Docs` },
@@ -529,15 +756,14 @@ export const listAccessibleWorkerFolders = async (req, res) => {
             }
         }
         // Remove duplicate folders by id
-        const uniqueFolders = [];
-        const seen = new Set();
+        // Use a Map for efficient deduplication by folder.id
+        const uniqueFoldersMap = new Map();
         for (const folder of resultFolders) {
-            if (!seen.has(folder.id)) {
-                uniqueFolders.push(folder);
-                seen.add(folder.id);
+            if (!uniqueFoldersMap.has(folder.id)) {
+                uniqueFoldersMap.set(folder.id, folder);
             }
         }
-        res.json({ folders: uniqueFolders });
+        res.json({ folders: Array.from(uniqueFoldersMap.values()) });
     } catch (err) {
         res.status(500).json({ error: 'Failed to list accessible worker folders' });
     }
@@ -548,14 +774,8 @@ export const addWorkerNote = async (req, res) => {
     const { docId, body } = req.body;
     if (!docId || !body) return res.status(400).json({ error: 'Missing docId or body' });
     try {
-        // Use a new OAuth2 client instance for each request
-        const { getOAuth2Client } = await import('../services/googleService.js');
-        const oauth2Client = getOAuth2Client();
-        if (!req.session.user?.tokens) {
-            throw new Error('No tokens found in session. User must log in.');
-        }
-        oauth2Client.setCredentials(req.session.user.tokens);
-        const docs = google.docs({ version: 'v1', auth: oauth2Client });
+        const docs = getDocsClient(req);
+        
         // Get the current document content to find the end
         const doc = await docs.documents.get({ documentId: docId });
         let endIndex = 1;
@@ -565,10 +785,12 @@ export const addWorkerNote = async (req, res) => {
                 endIndex = last.endIndex - 1;
             }
         }
+        
         // Prepare the note content (no title, just timestamp and body)
         const now = new Date();
         const dateStr = now.toLocaleString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
         const noteText = `${dateStr}\n${body}\n\n`;
+        
         // Insert the note at the end
         await docs.documents.batchUpdate({
             documentId: docId,

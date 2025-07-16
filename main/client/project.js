@@ -1,4 +1,8 @@
+import { initializeCommonFeatures } from './utils.js';
+
 document.addEventListener('DOMContentLoaded', () => {
+    // Initialize common features (CSRF protection, error handlers)
+    initializeCommonFeatures();
     const form = document.getElementById('project-form');
     const nameInput = document.getElementById('project-name');
     const resultDiv = document.getElementById('result');
@@ -235,28 +239,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadProjectsDropdown();
     // loadWorkerProjectsDropdown removed: worker project selection is no longer needed
-    // Add CSRF token to all fetch POST/PUT/DELETE requests
-    const originalFetch = window.fetch;
-    window.fetch = function(input, init = {}) {
-        if (init && (!init.method || ['POST','PUT','DELETE'].includes(init.method.toUpperCase()))) {
-            init.headers = init.headers || {};
-            const csrfToken = window.localStorage.getItem('csrfToken') || document.querySelector('meta[name="csrf-token"]')?.content;
-            if (csrfToken) {
-                init.headers['x-csrf-token'] = csrfToken;
-            }
-        }
-        return originalFetch(input, init);
-    };
-    fetch('/user').then(res => res.json()).then(data => {
-        if (data.csrfToken) {
-            window.localStorage.setItem('csrfToken', data.csrfToken);
-        }
-    });
-});
-
-window.addEventListener('error', function(e) {
-    alert('A critical error occurred: ' + e.message);
-});
-window.addEventListener('unhandledrejection', function(e) {
-    alert('A critical error occurred: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
 });

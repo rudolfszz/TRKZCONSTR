@@ -1,14 +1,37 @@
-import { getManagerInboxEmails } from '../controllers/googleController.js';
-// Get recent emails from manager's Gmail inbox
-router.get('/api/manager-inbox-emails', getManagerInboxEmails);
-
+// Route to get projectId -> calendarId mapping
+import { getProjectCalendarMap } from '../controllers/googleController.js';
+import { createCalendar, deleteCalendar } from '../controllers/googleController.js';
 import express from 'express';
-import { createProjectFolder, listProjectFolders, listProjectFiles, getWorkerFolderId, shareWorkerFolder, listAccessibleWorkerFolders, addWorkerNote, uploadWorkerPhoto, getRecentEmails, getRecentEntries, addFileToProject, addManagerNote } from '../controllers/googleController.js';
+import { createProjectFolder, listProjectFolders, listProjectFiles, 
+    getWorkerFolderId, shareWorkerFolder, listAccessibleWorkerFolders, 
+    addWorkerNote, uploadWorkerPhoto, getRecentEmails, getRecentEntries, 
+    addFileToProject, addManagerNote, getManagerInboxEmails, 
+    getCalendarEvents, addCalendarEvent, getCalendarList } from '../controllers/googleController.js';
 import { getDriveClient } from '../services/googleService.js';
 import multer from 'multer';
 
 const router = express.Router();
 const upload = multer();
+
+router.get('/api/project-calendar-map', getProjectCalendarMap);
+
+// Create a new Google Calendar
+router.post('/api/create-calendar', createCalendar);
+
+// Delete a Google Calendar
+router.post('/api/delete-calendar', deleteCalendar);
+
+// List user's calendars
+router.get('/api/calendar-list', getCalendarList);
+
+// Get recent emails from manager's Gmail inbox
+router.get('/api/manager-inbox-emails', getManagerInboxEmails);
+
+// Get Google Calendar events for a date range
+router.get('/api/calendar-events', getCalendarEvents);
+
+// Add a Google Calendar event for the authenticated user
+router.post('/api/calendar-add-event', addCalendarEvent);
 
 // Middleware to require projectId in query or body
 function requireProjectId(req, res, next) {
