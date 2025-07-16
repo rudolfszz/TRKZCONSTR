@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Test</title>
+</head>
+<body>
+    <h1>Debug Test</h1>
+    <button id="test-btn">Test Button</button>
+    <div id="test-result"></div>
+    
+    <script type="module">
+        document.getElementById('test-btn').onclick = async () => {
+            const result = document.getElementById('test-result');
+            result.innerHTML = 'Testing...';
+            
+            try {
+                const response = await fetch('/user');
+                const data = await response.json();
+                result.innerHTML = 'User data: ' + JSON.stringify(data);
+            } catch (error) {
+                result.innerHTML = 'Error: ' + error.message;
+            }
+        };
+    </script>
+</body>
+</html>

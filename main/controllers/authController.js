@@ -1,15 +1,42 @@
 import { getOAuth2Client, SCOPES } from '../services/googleService.js';
 
 export const login = (req, res) => {
-    const oauth2Client = getOAuth2Client();
-    const authUrl = oauth2Client.generateAuthUrl({ access_type: 'offline', scope: SCOPES });
-    res.redirect(authUrl);
+    try {
+        const oauth2Client = getOAuth2Client();
+        const authUrl = oauth2Client.generateAuthUrl({ 
+            access_type: 'offline', 
+            scope: SCOPES,
+            prompt: 'consent'
+        });
+        console.log('🔐 Redirecting to Google OAuth:', authUrl);
+        res.redirect(authUrl);
+    } catch (error) {
+        console.error('❌ Login error:', error);
+        res.status(500).json({ 
+            error: 'Failed to initialize login', 
+            details: error.message,
+            solution: 'Please check your Google OAuth credentials in .env file'
+        });
+    }
 };
 
 export const oauthCallback = async (req, res) => {
     const code = req.query.code;
+    const error = req.query.error;
+    
+    if (error) {
+        console.error('❌ OAuth callback error:', error);
+        return res.redirect('/login.html?error=oauth_denied');
+    }
+    
+    if (!code) {
+        console.error('❌ No authorization code received');
+        return res.redirect('/login.html?error=no_code');
+    }
+    
     const oauth2Client = getOAuth2Client();
     try {
+        console.log('🔄 Exchanging code for tokens...');
         const { tokens } = await oauth2Client.getToken(code);
         oauth2Client.setCredentials(tokens);
 
@@ -34,20 +61,24 @@ export const oauthCallback = async (req, res) => {
                     }).join(''));
                 }
                 email = JSON.parse(jsonPayload).email;
+                console.log('✅ Successfully extracted email:', email);
             } catch (e) {
-                console.error('id_token decode error:', e);
+                console.error('❌ id_token decode error:', e);
             }
         }
 
         // Log for debugging
         if (!email) {
-            console.error('Email extraction failed');
-            return res.status(400).send('Email extraction failed');
+            console.error('❌ Email extraction failed');
+            return res.redirect('/login.html?error=email_extraction_failed');
         }
+        
         req.session.user = { authenticated: true, tokens, email };
+        console.log('✅ Login successful, redirecting to /index.html');
         res.redirect('/index.html');
     } catch (err) {
-        res.status(500).send('Auth failed');
+        console.error('❌ OAuth callback error:', err);
+        res.redirect('/login.html?error=auth_failed');
     }
 };
 

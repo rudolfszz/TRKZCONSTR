@@ -512,14 +512,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) {
         logoutBtn.onclick = () => {
-            fetch('/logout').then(() => window.location.href = 'login.html');
+            console.log('🔓 Logout button clicked');
+            fetch('/logout').then(() => {
+                console.log('✅ Logout successful, redirecting to login.html');
+                window.location.href = 'login.html';
+            }).catch(error => {
+                console.error('❌ Logout failed:', error);
+            });
         };
+    } else {
+        console.error('❌ Logout button not found');
     }
 
     const switchToWorkerBtn = document.getElementById('switch-to-worker-btn');
     if (switchToWorkerBtn) {
         switchToWorkerBtn.onclick = () => {
+            console.log('🔄 Switch to worker button clicked');
             window.location.href = 'workerSide.html';
         };
+    } else {
+        console.error('❌ Switch to worker button not found');
     }
 });

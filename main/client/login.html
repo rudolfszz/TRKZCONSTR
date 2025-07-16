@@ -3,15 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login</title>
+    <title>Login - TRKZ Construction</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 400px;
+            margin: 100px auto;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        
+        #login-btn {
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        #login-btn:hover {
+            background-color: #357ae8;
+        }
+        
+        #login-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .instructions {
+            margin-top: 30px;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
 </head>
 <body>
-    <h1>Login</h1>
-    <button id="login-btn">Log in with Google</button>
-    <script src="login.js"></script>
+    <h1>🏗️ TRKZ Construction</h1>
+    <p>Sign in to access your projects</p>
+    
+    <button id="login-btn">
+        <svg width="18" height="18" viewBox="0 0 18 18">
+            <path fill="currentColor" d="M9.204 7.634v2.72h4.628c-.193 1.235-1.43 3.62-4.628 3.62-2.786 0-5.06-2.307-5.06-5.154S6.418 3.666 9.204 3.666c1.585 0 2.648.674 3.255 1.254l2.141-2.064C13.227 1.659 11.37.865 9.204.865c-4.41 0-8 3.59-8 8s3.59 8 8 8c4.616 0 7.68-3.248 7.68-7.82 0-.526-.056-1.028-.154-1.411H9.204z"/>
+        </svg>
+        Sign in with Google
+    </button>
+    
+    <div class="instructions">
+        <p><strong>Setup Instructions:</strong></p>
+        <p>1. Create a Google Cloud Project</p>
+        <p>2. Enable Google APIs (Drive, Calendar, Gmail, Docs)</p>
+        <p>3. Create OAuth 2.0 credentials</p>
+        <p>4. Add credentials to .env file</p>
+    </div>
+    
+    <script type="module" src="login.js"></script>
 </body>
 </html>
-<!-- asdasd asdasd-->
- <!-- asdasd asdasd-->
-  <!-- sdfsdf asdasd-->
-   <!-- asdasd asdasd-->

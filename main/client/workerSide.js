@@ -160,15 +160,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) {
         logoutBtn.onclick = () => {
-            fetch('/logout').then(() => window.location.href = 'login.html');
+            console.log('🔓 Logout button clicked');
+            fetch('/logout').then(() => {
+                console.log('✅ Logout successful, redirecting to login.html');
+                window.location.href = 'login.html';
+            }).catch(error => {
+                console.error('❌ Logout failed:', error);
+            });
         };
+    } else {
+        console.error('❌ Logout button not found');
     }
 
     const switchToManagerBtn = document.getElementById('switch-to-manager-btn');
     if (switchToManagerBtn) {
         switchToManagerBtn.onclick = () => {
+            console.log('🔄 Switch to manager button clicked');
             window.location.href = 'managerSide.html';
         };
+    } else {
+        console.error('❌ Switch to manager button not found');
     }
 
     // Camera/photo functionality

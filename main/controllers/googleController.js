@@ -6,7 +6,6 @@ import {
     getDocsClient, 
     getDriveClient 
 } from '../services/googleUtils.js';
-import { google } from 'googleapis';
 export const getProjectCalendarMap = async (req, res) => {
     try {
         // You may need to adjust this logic to match your data storage
@@ -406,8 +405,6 @@ export const addManagerNote = async (req, res) => {
         res.status(500).json({ error: 'Failed to add note to personal doc', details: err.message });
     }
 };
-import { getDriveClient } from '../services/googleService.js';
-import { google } from 'googleapis';
 import { Readable } from 'stream';
 
 export const createProjectFolder = async (req, res) => {
