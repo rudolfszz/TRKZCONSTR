@@ -4,7 +4,8 @@ import {
     getCalendarClient, 
     getGmailClient, 
     getDocsClient, 
-    getDriveClient 
+    getDriveClient,
+    getSheetsClient
 } from '../services/googleUtils.js';
 export const getProjectCalendarMap = async (req, res) => {
     try {
@@ -206,21 +207,55 @@ export const getManagerInboxEmails = async (req, res) => {
     try {
         const gmail = getGmailClient(req);
         
-        // Get the last 10 messages from the inbox
-        const messagesResp = await gmail.users.messages.list({ userId: 'me', maxResults: 10, labelIds: ['INBOX'] });
+        // Get query parameters for pagination and limit
+        const maxResults = parseInt(req.query.maxResults) || 50; // Default to 50 emails
+        const pageToken = req.query.pageToken || undefined;
+        
+        // Get messages from the inbox
+        const messagesResp = await gmail.users.messages.list({ 
+            userId: 'me', 
+            maxResults: maxResults, 
+            labelIds: ['INBOX'],
+            pageToken: pageToken
+        });
+        
         const messages = messagesResp.data.messages || [];
         
         const emailResults = [];
         for (const msg of messages) {
-            const msgData = await gmail.users.messages.get({ userId: 'me', id: msg.id, format: 'metadata', metadataHeaders: ['From', 'Subject', 'Date'] });
-            const headers = msgData.data.payload.headers;
-            const from = headers.find(h => h.name === 'From')?.value || '';
-            const subject = headers.find(h => h.name === 'Subject')?.value || '';
-            const date = headers.find(h => h.name === 'Date')?.value || '';
-            emailResults.push({ from, subject, date });
+            try {
+                const msgData = await gmail.users.messages.get({ 
+                    userId: 'me', 
+                    id: msg.id, 
+                    format: 'metadata', 
+                    metadataHeaders: ['From', 'Subject', 'Date', 'Message-ID']
+                });
+                
+                const headers = msgData.data.payload.headers;
+                const from = headers.find(h => h.name === 'From')?.value || '';
+                const subject = headers.find(h => h.name === 'Subject')?.value || '';
+                const date = headers.find(h => h.name === 'Date')?.value || '';
+                const messageId = headers.find(h => h.name === 'Message-ID')?.value || msg.id;
+                
+                emailResults.push({ 
+                    id: msg.id,
+                    from, 
+                    subject, 
+                    date, 
+                    messageId,
+                    threadId: msg.threadId
+                });
+            } catch (msgErr) {
+                console.error('Error fetching message:', msgErr);
+                // Continue with other messages even if one fails
+            }
         }
-        
-        res.json({ emails: emailResults });
+        console.log(emailResults);
+        res.json({ 
+            emails: emailResults,
+            nextPageToken: messagesResp.data.nextPageToken,
+            resultSizeEstimate: messagesResp.data.resultSizeEstimate
+        });
     } catch (err) {
         if (err.message === 'Not authenticated') {
             return res.status(401).json({ error: 'Not authenticated' });
@@ -878,5 +913,792 @@ export const uploadWorkerPhoto = async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Failed to upload photo', details: err.message });
+    }
+};
+
+// Create a complete project workspace with specific sheets
+export const createProjectWorkspace = async (req, res) => {
+    const { name, description } = req.body;
+    if (!name) return res.status(400).json({ error: 'Project name required' });
+    
+    try {
+        const drive = getDriveClient(req);
+        const sheets = getSheetsClient(req);
+        
+        // 1. Create the main project folder
+        const fileMetadata = {
+            name,
+            mimeType: 'application/vnd.google-apps.folder',
+        };
+        const folder = await drive.files.create({
+            resource: fileMetadata,
+            fields: 'id, name',
+        });
+        const folderId = folder.data.id;
+
+        // 2. Create the main project spreadsheet with 3 sheets
+        const spreadsheetResource = {
+            properties: {
+                title: name // Use the project name as the spreadsheet title
+            },
+            sheets: [
+                {
+                    properties: {
+                        title: 'todoList',
+                        gridProperties: {
+                            rowCount: 1000,
+                            columnCount: 3
+                        }
+                    }
+                },
+                {
+                    properties: {
+                        title: 'dailyLogs',
+                        gridProperties: {
+                            rowCount: 1000,
+                            columnCount: 10
+                        }
+                    }
+                },
+                {
+                    properties: {
+                        title: 'notes',
+                        gridProperties: {
+                            rowCount: 1000,
+                            columnCount: 3
+                        }
+                    }
+                }
+            ]
+        };
+
+        const spreadsheet = await sheets.spreadsheets.create({
+            resource: spreadsheetResource,
+            fields: 'spreadsheetId,properties.title,sheets.properties'
+        });
+
+        const spreadsheetId = spreadsheet.data.spreadsheetId;
+        
+        // Get the actual sheet IDs from the created spreadsheet
+        const sheetIds = {};
+        spreadsheet.data.sheets.forEach(sheet => {
+            const title = sheet.properties.title;
+            const sheetId = sheet.properties.sheetId;
+            sheetIds[title] = sheetId;
+        });
+
+        // 2. Set up headers and sample data for each sheet using actual sheet IDs
+        const requests = [
+            // todoList headers and sample data
+            {
+                updateCells: {
+                    range: {
+                        sheetId: sheetIds['todoList'],
+                        startRowIndex: 0,
+                        endRowIndex: 6,
+                        startColumnIndex: 0,
+                        endColumnIndex: 3
+                    },
+                    rows: [
+                        // Headers
+                        {
+                            values: [
+                                { userEnteredValue: { stringValue: 'Date' } },
+                                { userEnteredValue: { stringValue: 'Due' } },
+                                { userEnteredValue: { stringValue: 'Is Done' } }
+                            ]
+                        },
+                        // Sample data
+                        {
+                            values: [
+                                { userEnteredValue: { stringValue: '2025-07-21' } },
+                                { userEnteredValue: { stringValue: 'Finish project setup' } },
+                                { userEnteredValue: { stringValue: 'Yes' } }
+                            ]
+                        },
+                        {
+                            values: [
+                                { userEnteredValue: { stringValue: '2025-07-22' } },
+                                { userEnteredValue: { stringValue: 'Review documentation' } },
+                                { userEnteredValue: { stringValue: 'No' } }
+                            ]
+                        },
+                        {
+                            values: [
+                                { userEnteredValue: { stringValue: '2025-07-23' } },
+                                { userEnteredValue: { stringValue: 'Test functionality' } },
+                                { userEnteredValue: { stringValue: 'No' } }
+                            ]
+                        },
+                        {
+                            values: [
+                                { userEnteredValue: { stringValue: '2025-07-24' } },
+                                { userEnteredValue: { stringValue: 'Deploy to production' } },
+                                { userEnteredValue: { stringValue: 'No' } }
+                            ]
+                        },
+                        {
+                            values: [
+                                { userEnteredValue: { stringValue: '2025-07-25' } },
+                                { userEnteredValue: { stringValue: 'Create user guide' } },
+                                { userEnteredValue: { stringValue: 'No' } }
+                            ]
+                        }
+                    ],
+                    fields: 'userEnteredValue'
+                }
+            },
+                        // dailyLogs headers and sample data
+            {
+                updateCells: {
+                    range: {
+                        sheetId: sheetIds['dailyLogs'],
+                        startRowIndex: 0,
+                        endRowIndex: 6,
+                        startColumnIndex: 0,
+                        endColumnIndex: 6
+                    },
+                    rows: [
+                        // Headers
+                        {
+                            values: [
+                                { userEnteredValue: { stringValue: 'Date' } },
+                                { userEnteredValue: { stringValue: 'Hours Worked' } },
+                                { userEnteredValue: { stringValue: 'Tasks Completed' } },
+                                { userEnteredValue: { stringValue: 'Progress %' } },
+                                { userEnteredValue: { stringValue: 'Number of X' } },
+                                { userEnteredValue: { stringValue: 'Status' } }
+                            ]
+                        },
+                        // Sample data
+                        {
+                            values: [
+                                { userEnteredValue: { stringValue: '2025-07-21' } },
+                                { userEnteredValue: { numberValue: 7.5 } },
+                                { userEnteredValue: { numberValue: 5 } },
+                                { userEnteredValue: { numberValue: 85 } },
+                                { userEnteredValue: { numberValue: 15 } },
+                                { userEnteredValue: { stringValue: 'On Track' } }
+                            ]
+                        },
+                        {
+                            values: [
+                                { userEnteredValue: { stringValue: '2025-07-20' } },
+                                { userEnteredValue: { numberValue: 6.0 } },
+                                { userEnteredValue: { numberValue: 3 } },
+                                { userEnteredValue: { numberValue: 65 } },
+                                { userEnteredValue: { numberValue: 12 } },
+                                { userEnteredValue: { stringValue: 'On Track' } }
+                            ]
+                        },
+                        {
+                            values: [
+                                { userEnteredValue: { stringValue: '2025-07-19' } },
+                                { userEnteredValue: { numberValue: 8.0 } },
+                                { userEnteredValue: { numberValue: 6 } },
+                                { userEnteredValue: { numberValue: 75 } },
+                                { userEnteredValue: { numberValue: 10 } },
+                                { userEnteredValue: { stringValue: 'Ahead' } }
+                            ]
+                        },
+                        {
+                            values: [
+                                { userEnteredValue: { stringValue: '2025-07-18' } },
+                                { userEnteredValue: { numberValue: 5.5 } },
+                                { userEnteredValue: { numberValue: 4 } },
+                                { userEnteredValue: { numberValue: 55 } },
+                                { userEnteredValue: { numberValue: 8 } },
+                                { userEnteredValue: { stringValue: 'Behind' } }
+                            ]
+                        },
+                        {
+                            values: [
+                                { userEnteredValue: { stringValue: '2025-07-17' } },
+                                { userEnteredValue: { numberValue: 9.0 } },
+                                { userEnteredValue: { numberValue: 7 } },
+                                { userEnteredValue: { numberValue: 90 } },
+                                { userEnteredValue: { numberValue: 18 } },
+                                { userEnteredValue: { stringValue: 'Ahead' } }
+                            ]
+                        }
+                    ],
+                    fields: 'userEnteredValue'
+                }
+            },
+            // notes headers and sample data
+            {
+                updateCells: {
+                    range: {
+                        sheetId: sheetIds['notes'],
+                        startRowIndex: 0,
+                        endRowIndex: 8,
+                        startColumnIndex: 0,
+                        endColumnIndex: 3
+                    },
+                    rows: [
+                        // Headers
+                        {
+                            values: [
+                                { userEnteredValue: { stringValue: 'Date' } },
+                                { userEnteredValue: { stringValue: 'Time' } },
+                                { userEnteredValue: { stringValue: 'Note' } }
+                            ]
+                        },
+                        // Sample data
+                        {
+                            values: [
+                                { userEnteredValue: { stringValue: '2025-07-21' } },
+                                { userEnteredValue: { stringValue: '09:15' } },
+                                { userEnteredValue: { stringValue: 'Started working on the project setup. Good energy today!' } }
+                            ]
+                        },
+                        {
+                            values: [
+                                { userEnteredValue: { stringValue: '2025-07-21' } },
+                                { userEnteredValue: { stringValue: '11:30' } },
+                                { userEnteredValue: { stringValue: 'Fixed the authentication issues. CSRF tokens working properly now.' } }
+                            ]
+                        },
+                        {
+                            values: [
+                                { userEnteredValue: { stringValue: '2025-07-21' } },
+                                { userEnteredValue: { stringValue: '14:45' } },
+                                { userEnteredValue: { stringValue: 'Implemented the dark theme. Looks much better!' } }
+                            ]
+                        },
+                        {
+                            values: [
+                                { userEnteredValue: { stringValue: '2025-07-20' } },
+                                { userEnteredValue: { stringValue: '10:00' } },
+                                { userEnteredValue: { stringValue: 'Meeting with team about requirements. Need to focus on user experience.' } }
+                            ]
+                        },
+                        {
+                            values: [
+                                { userEnteredValue: { stringValue: '2025-07-20' } },
+                                { userEnteredValue: { stringValue: '16:20' } },
+                                { userEnteredValue: { stringValue: 'Discovered a bug in the sheet creation. Working on fix.' } }
+                            ]
+                        },
+                        {
+                            values: [
+                                { userEnteredValue: { stringValue: '2025-07-19' } },
+                                { userEnteredValue: { stringValue: '08:45' } },
+                                { userEnteredValue: { stringValue: 'Great breakthrough! Found the solution to the Google Sheets API issue.' } }
+                            ]
+                        },
+                        {
+                            values: [
+                                { userEnteredValue: { stringValue: '2025-07-19' } },
+                                { userEnteredValue: { stringValue: '15:30' } },
+                                { userEnteredValue: { stringValue: 'Code review completed. Ready for testing phase.' } }
+                            ]
+                        }
+                    ],
+                    fields: 'userEnteredValue'
+                }
+            }
+        ];
+
+        // Apply the headers and sample data
+        await sheets.spreadsheets.batchUpdate({
+            spreadsheetId,
+            resource: {
+                requests
+            }
+        });
+
+        // 3. Move the spreadsheet to the project folder
+        await drive.files.update({
+            fileId: spreadsheetId,
+            addParents: folderId,
+            fields: 'id, parents'
+        });
+
+        // 4. Create a project calendar
+        let projectCalendarId = null;
+        try {
+            const calendarApi = getCalendarClient(req);
+            const calendarResp = await calendarApi.calendars.insert({ 
+                requestBody: { 
+                    summary: `${name} - Project Calendar`,
+                    description: description || `Calendar for project: ${name}`
+                } 
+            });
+            projectCalendarId = calendarResp.data.id;
+            
+            // Add to user's calendar list
+            try {
+                await calendarApi.calendarList.insert({ requestBody: { id: projectCalendarId } });
+            } catch (e) {
+                console.log('Calendar already in list or error adding:', e.message);
+            }
+        } catch (err) {
+            console.error('Failed to create project calendar:', err);
+        }
+
+        res.json({
+            success: true,
+            projectId: folderId, // Use folder ID as project ID
+            projectName: name,
+            spreadsheetId,
+            calendarId: projectCalendarId,
+            folderId,
+            message: 'Project workspace created successfully'
+        });
+
+    } catch (err) {
+        console.error('Failed to create project workspace:', err);
+        res.status(500).json({ 
+            error: 'Failed to create project workspace', 
+            details: err.message 
+        });
+    }
+};
+
+// Get todos from project spreadsheet
+export const getTodos = async (req, res) => {
+    const { projectId } = req.query;
+    if (!projectId) return res.status(400).json({ error: 'Missing projectId' });
+
+    try {
+        const drive = getDriveClient(req);
+        const sheets = getSheetsClient(req);
+
+        // Find the project spreadsheet
+        const filesResp = await drive.files.list({
+            q: `'${projectId}' in parents and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`,
+            fields: 'files(id, name)'
+        });
+
+        if (!filesResp.data.files.length) {
+            return res.status(404).json({ error: 'No spreadsheet found for project' });
+        }
+
+        const spreadsheetId = filesResp.data.files[0].id;
+
+        // Read the todoList sheet
+        const range = 'todoList!A:C';
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range
+        });
+
+        const rows = response.data.values || [];
+        if (rows.length <= 1) {
+            return res.json({ todos: [], spreadsheetId });
+        }
+
+        // Skip header row and convert to objects
+        const todos = rows.slice(1).map(row => ({
+            dueDate: row[0] || '',
+            task: row[1] || '',
+            completed: row[2] === 'Yes'
+        }));
+
+        res.json({ todos, spreadsheetId });
+
+    } catch (err) {
+        console.error('Failed to get todos:', err);
+        res.status(500).json({ 
+            error: 'Failed to get todos', 
+            details: err.message 
+        });
+    }
+};
+
+// Add a new todo to project spreadsheet
+export const addTodo = async (req, res) => {
+    const { projectId, task, dueDate } = req.body;
+    if (!projectId || !task || !dueDate) {
+        return res.status(400).json({ error: 'Missing projectId, task, or dueDate' });
+    }
+
+    try {
+        const drive = getDriveClient(req);
+        const sheets = getSheetsClient(req);
+
+        // Find the project spreadsheet
+        const filesResp = await drive.files.list({
+            q: `'${projectId}' in parents and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`,
+            fields: 'files(id, name)'
+        });
+
+        if (!filesResp.data.files.length) {
+            return res.status(404).json({ error: 'No spreadsheet found for project' });
+        }
+
+        const spreadsheetId = filesResp.data.files[0].id;
+
+        // Append new todo to the todoList sheet
+        const values = [[dueDate, task, 'No']];
+        
+        await sheets.spreadsheets.values.append({
+            spreadsheetId,
+            range: 'todoList!A:C',
+            valueInputOption: 'RAW',
+            resource: { values }
+        });
+
+        res.json({ success: true });
+
+    } catch (err) {
+        console.error('Failed to add todo:', err);
+        res.status(500).json({ 
+            error: 'Failed to add todo', 
+            details: err.message 
+        });
+    }
+};
+
+// Update todo completion status
+export const updateTodo = async (req, res) => {
+    const { projectId, rowIndex, completed } = req.body;
+    if (!projectId || !rowIndex || completed === undefined) {
+        return res.status(400).json({ error: 'Missing projectId, rowIndex, or completed' });
+    }
+
+    try {
+        const drive = getDriveClient(req);
+        const sheets = getSheetsClient(req);
+
+        // Find the project spreadsheet
+        const filesResp = await drive.files.list({
+            q: `'${projectId}' in parents and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`,
+            fields: 'files(id, name)'
+        });
+
+        if (!filesResp.data.files.length) {
+            return res.status(404).json({ error: 'No spreadsheet found for project' });
+        }
+
+        const spreadsheetId = filesResp.data.files[0].id;
+
+        // Update the completion status (column C)
+        const range = `todoList!C${rowIndex}`;
+        const values = [[completed ? 'Yes' : 'No']];
+
+        await sheets.spreadsheets.values.update({
+            spreadsheetId,
+            range,
+            valueInputOption: 'RAW',
+            resource: { values }
+        });
+
+        res.json({ success: true });
+
+    } catch (err) {
+        console.error('Failed to update todo:', err);
+        res.status(500).json({ 
+            error: 'Failed to update todo', 
+            details: err.message 
+        });
+    }
+};
+
+// Update todo task text
+export const updateTodoTask = async (req, res) => {
+    const { projectId, rowIndex, task } = req.body;
+    if (!projectId || !rowIndex || !task) {
+        return res.status(400).json({ error: 'Missing projectId, rowIndex, or task' });
+    }
+
+    try {
+        const drive = getDriveClient(req);
+        const sheets = getSheetsClient(req);
+
+        // Find the project spreadsheet
+        const filesResp = await drive.files.list({
+            q: `'${projectId}' in parents and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`,
+            fields: 'files(id, name)'
+        });
+
+        if (!filesResp.data.files.length) {
+            return res.status(404).json({ error: 'No spreadsheet found for project' });
+        }
+
+        const spreadsheetId = filesResp.data.files[0].id;
+
+        // Update the task text (column B)
+        const range = `todoList!B${rowIndex}`;
+        const values = [[task]];
+
+        await sheets.spreadsheets.values.update({
+            spreadsheetId,
+            range,
+            valueInputOption: 'RAW',
+            resource: { values }
+        });
+
+        res.json({ success: true });
+
+    } catch (err) {
+        console.error('Failed to update todo task:', err);
+        res.status(500).json({ 
+            error: 'Failed to update todo task', 
+            details: err.message 
+        });
+    }
+};
+
+// Delete a todo from project spreadsheet
+export const deleteTodo = async (req, res) => {
+    const { projectId, rowIndex } = req.body;
+    if (!projectId || !rowIndex) {
+        return res.status(400).json({ error: 'Missing projectId or rowIndex' });
+    }
+
+    try {
+        const drive = getDriveClient(req);
+        const sheets = getSheetsClient(req);
+
+        // Find the project spreadsheet
+        const filesResp = await drive.files.list({
+            q: `'${projectId}' in parents and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`,
+            fields: 'files(id, name)'
+        });
+
+        if (!filesResp.data.files.length) {
+            return res.status(404).json({ error: 'No spreadsheet found for project' });
+        }
+
+        const spreadsheetId = filesResp.data.files[0].id;
+
+        // Get the sheet metadata to find the todoList sheet ID
+        const spreadsheetMetadata = await sheets.spreadsheets.get({
+            spreadsheetId,
+            fields: 'sheets.properties'
+        });
+
+        const todoSheet = spreadsheetMetadata.data.sheets.find(
+            sheet => sheet.properties.title === 'todoList'
+        );
+
+        if (!todoSheet) {
+            return res.status(404).json({ error: 'todoList sheet not found' });
+        }
+
+        const sheetId = todoSheet.properties.sheetId;
+
+        // Delete the row using batchUpdate
+        await sheets.spreadsheets.batchUpdate({
+            spreadsheetId,
+            resource: {
+                requests: [{
+                    deleteDimension: {
+                        range: {
+                            sheetId,
+                            dimension: 'ROWS',
+                            startIndex: rowIndex - 1, // Convert to 0-based index
+                            endIndex: rowIndex
+                        }
+                    }
+                }]
+            }
+        });
+
+        res.json({ success: true });
+
+    } catch (err) {
+        console.error('Failed to delete todo:', err);
+        res.status(500).json({ 
+            error: 'Failed to delete todo', 
+            details: err.message 
+        });
+    }
+};
+
+// Get today's daily check-in data
+export const getDailyCheckin = async (req, res) => {
+    const { projectId } = req.query;
+    if (!projectId) return res.status(400).json({ error: 'Missing projectId' });
+
+    try {
+        const drive = getDriveClient(req);
+        const sheets = getSheetsClient(req);
+
+        // Find the project spreadsheet
+        const filesResp = await drive.files.list({
+            q: `'${projectId}' in parents and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`,
+            fields: 'files(id, name)'
+        });
+
+        if (!filesResp.data.files.length) {
+            return res.status(404).json({ error: 'No spreadsheet found for project' });
+        }
+
+        const spreadsheetId = filesResp.data.files[0].id;
+
+        // Read the dailyLogs sheet
+        const range = 'dailyLogs!A:F';
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range
+        });
+
+        const rows = response.data.values || [];
+        if (rows.length <= 1) {
+            return res.json({ todayData: null, spreadsheetId });
+        }
+
+        // Get today's date in YYYY-MM-DD format
+        const today = new Date().toISOString().split('T')[0];
+
+        // Find today's row (skip header row)
+        const todayRow = rows.slice(1).find(row => row[0] === today);
+
+        let todayData = null;
+        if (todayRow) {
+            todayData = {
+                date: todayRow[0] || '',
+                hoursWorked: parseFloat(todayRow[1]) || 0,
+                tasksCompleted: parseInt(todayRow[2]) || 0,
+                progressPercent: parseInt(todayRow[3]) || 0,
+                numberX: parseInt(todayRow[4]) || 0,
+                status: todayRow[5] || ''
+            };
+        }
+
+        res.json({ todayData, spreadsheetId });
+
+    } catch (err) {
+        console.error('Failed to get daily check-in:', err);
+        res.status(500).json({ 
+            error: 'Failed to get daily check-in', 
+            details: err.message 
+        });
+    }
+};
+
+// Save daily check-in data
+export const saveDailyCheckin = async (req, res) => {
+    const { projectId, date, hoursWorked, tasksCompleted, progressPercent, numberX, status } = req.body;
+    
+    if (!projectId || !date) {
+        return res.status(400).json({ error: 'Missing projectId or date' });
+    }
+
+    try {
+        const drive = getDriveClient(req);
+        const sheets = getSheetsClient(req);
+
+        // Find the project spreadsheet
+        const filesResp = await drive.files.list({
+            q: `'${projectId}' in parents and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`,
+            fields: 'files(id, name)'
+        });
+
+        if (!filesResp.data.files.length) {
+            return res.status(404).json({ error: 'No spreadsheet found for project' });
+        }
+
+        const spreadsheetId = filesResp.data.files[0].id;
+
+        // Read the current dailyLogs sheet to check if today's entry exists
+        const range = 'dailyLogs!A:F';
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range
+        });
+
+        const rows = response.data.values || [];
+        let todayRowIndex = -1;
+
+        // Find if today's row already exists (skip header row)
+        if (rows.length > 1) {
+            todayRowIndex = rows.slice(1).findIndex(row => row[0] === date);
+            if (todayRowIndex !== -1) {
+                todayRowIndex += 2; // Convert to 1-based index and account for header
+            }
+        }
+
+        const values = [
+            [date, hoursWorked, tasksCompleted, progressPercent, numberX, status || 'On Track']
+        ];
+
+        if (todayRowIndex > 0) {
+            // Update existing row
+            const updateRange = `dailyLogs!A${todayRowIndex}:F${todayRowIndex}`;
+            await sheets.spreadsheets.values.update({
+                spreadsheetId,
+                range: updateRange,
+                valueInputOption: 'RAW',
+                resource: { values }
+            });
+        } else {
+            // Append new row
+            await sheets.spreadsheets.values.append({
+                spreadsheetId,
+                range: 'dailyLogs!A:F',
+                valueInputOption: 'RAW',
+                resource: { values }
+            });
+        }
+
+        res.json({ success: true });
+
+    } catch (err) {
+        console.error('Failed to save daily check-in:', err);
+        res.status(500).json({ 
+            error: 'Failed to save daily check-in', 
+            details: err.message 
+        });
+    }
+};
+
+// Get check-in history
+export const getCheckinHistory = async (req, res) => {
+    const { projectId } = req.query;
+    if (!projectId) return res.status(400).json({ error: 'Missing projectId' });
+
+    try {
+        const drive = getDriveClient(req);
+        const sheets = getSheetsClient(req);
+
+        // Find the project spreadsheet
+        const filesResp = await drive.files.list({
+            q: `'${projectId}' in parents and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`,
+            fields: 'files(id, name)'
+        });
+
+        if (!filesResp.data.files.length) {
+            return res.status(404).json({ error: 'No spreadsheet found for project' });
+        }
+
+        const spreadsheetId = filesResp.data.files[0].id;
+
+        // Read the dailyLogs sheet
+        const range = 'dailyLogs!A:F';
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range
+        });
+
+        const rows = response.data.values || [];
+        if (rows.length <= 1) {
+            return res.json({ history: [] });
+        }
+
+        // Convert rows to objects (skip header row) and sort by date descending
+        const history = rows.slice(1)
+            .filter(row => row[0]) // Only rows with dates
+            .map(row => ({
+                date: row[0] || '',
+                hoursWorked: parseFloat(row[1]) || 0,
+                tasksCompleted: parseInt(row[2]) || 0,
+                progressPercent: parseInt(row[3]) || 0,
+                numberX: parseInt(row[4]) || 0,
+                status: row[5] || ''
+            }))
+            .sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort by date descending
+
+        res.json({ history });
+
+    } catch (err) {
+        console.error('Failed to get check-in history:', err);
+        res.status(500).json({ 
+            error: 'Failed to get check-in history', 
+            details: err.message 
+        });
     }
 };

@@ -1,8 +1,14 @@
 import { getOAuth2Client, SCOPES } from '../services/googleService.js';
+import fetch from 'node-fetch';
 
 export const login = (req, res) => {
     try {
         const oauth2Client = getOAuth2Client();
+        const redirectUrl = req.query.redirect || '/index.html';
+        
+        // Store redirect URL in session
+        req.session.redirectAfterLogin = redirectUrl;
+        
         const authUrl = oauth2Client.generateAuthUrl({ 
             access_type: 'offline', 
             scope: SCOPES,
@@ -74,8 +80,13 @@ export const oauthCallback = async (req, res) => {
         }
         
         req.session.user = { authenticated: true, tokens, email };
-        console.log('✅ Login successful, redirecting to /index.html');
-        res.redirect('/index.html');
+        
+        // Use stored redirect URL or default
+        const redirectUrl = req.session.redirectAfterLogin || '/index.html';
+        delete req.session.redirectAfterLogin; // Clean up
+        
+        console.log('✅ Login successful, redirecting to', redirectUrl);
+        res.redirect(redirectUrl);
     } catch (err) {
         console.error('❌ OAuth callback error:', err);
         res.redirect('/login.html?error=auth_failed');
@@ -86,13 +97,62 @@ export const logout = (req, res) => {
     req.session.destroy(err => {
         if (err) return res.status(500).send('Logout failed');
         res.clearCookie('connect.sid');
-        res.redirect('/');
+        
+        // Handle different logout contexts
+        const redirectUrl = req.query.redirect || '/';
+        
+        if (req.method === 'POST') {
+            // For AJAX requests, return JSON
+            res.json({ success: true, redirectUrl });
+        } else {
+            // For direct navigation, redirect
+            res.redirect(redirectUrl);
+        }
     });
 };
 
-export const getUser = (req, res) => {
+export const getUser = async (req, res) => {
     if (req.session.user) {
-        res.json({ loggedIn: true, email: req.session.user.email || null, csrfToken: req.session.csrfToken });
+        try {
+            // Try to get additional user info from Google
+            const oauth2Client = getOAuth2Client();
+            oauth2Client.setCredentials(req.session.user.tokens);
+            
+            let userInfo = { email: req.session.user.email };
+            
+            try {
+                // Get user profile info
+                const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+                    headers: {
+                        'Authorization': `Bearer ${req.session.user.tokens.access_token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const profile = await response.json();
+                    userInfo = {
+                        email: profile.email,
+                        name: profile.name,
+                        picture: profile.picture
+                    };
+                }
+            } catch (profileError) {
+                console.log('Could not fetch user profile:', profileError.message);
+            }
+            
+            res.json({ 
+                loggedIn: true, 
+                ...userInfo,
+                csrfToken: req.session.csrfToken 
+            });
+        } catch (error) {
+            console.error('Error getting user info:', error);
+            res.json({ 
+                loggedIn: true, 
+                email: req.session.user.email || null, 
+                csrfToken: req.session.csrfToken 
+            });
+        }
     } else {
         res.json({ loggedIn: false });
     }

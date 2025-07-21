@@ -18,6 +18,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('worker-view').onclick = () => {
         window.location.href = 'workerSide.html';
     };
+    document.getElementById('project-view').onclick = () => {
+        window.location.href = 'projectView.html';
+    };
     document.getElementById('logout-btn').onclick = () => {
         fetch('/logout').then(() => window.location.href = 'login.html');
     };

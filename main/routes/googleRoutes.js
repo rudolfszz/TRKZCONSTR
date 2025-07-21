@@ -6,7 +6,9 @@ import { createProjectFolder, listProjectFolders, listProjectFiles,
     getWorkerFolderId, shareWorkerFolder, listAccessibleWorkerFolders, 
     addWorkerNote, uploadWorkerPhoto, getRecentEmails, getRecentEntries, 
     addFileToProject, addManagerNote, getManagerInboxEmails, 
-    getCalendarEvents, addCalendarEvent, getCalendarList } from '../controllers/googleController.js';
+    getCalendarEvents, addCalendarEvent, getCalendarList, createProjectWorkspace,
+    getTodos, addTodo, updateTodo, updateTodoTask, deleteTodo,
+    getDailyCheckin, saveDailyCheckin, getCheckinHistory } from '../controllers/googleController.js';
 import { getDriveClient } from '../services/googleService.js';
 import multer from 'multer';
 
@@ -53,6 +55,7 @@ router.post('/api/add-file', addFileToProject);
 router.post('/api/manager-notepad', addManagerNote);
 
 router.post('/create-project-folder', createProjectFolder);
+router.post('/api/create-project-workspace', createProjectWorkspace);
 router.get('/list-project-folders', listProjectFolders);
 router.get('/list-project-files', listProjectFiles);
 router.get('/get-worker-folder-id', getWorkerFolderId);
@@ -79,5 +82,17 @@ router.get('/api/worker-folder-permissions', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch permissions' });
     }
 });
+
+// Todo API endpoints
+router.get('/api/get-todos', getTodos);
+router.post('/api/add-todo', addTodo);
+router.post('/api/update-todo', updateTodo);
+router.post('/api/update-todo-task', updateTodoTask);
+router.post('/api/delete-todo', deleteTodo);
+
+// Daily Check-in API endpoints
+router.get('/api/get-daily-checkin', getDailyCheckin);
+router.post('/api/save-daily-checkin', saveDailyCheckin);
+router.get('/api/get-checkin-history', getCheckinHistory);
 
 export default router;

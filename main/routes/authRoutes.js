@@ -5,6 +5,7 @@ const router = express.Router();
 router.get('/login', login);
 router.get('/oauth2callback', oauthCallback);
 router.get('/logout', logout);
+router.post('/logout', logout);
 router.get('/user', getUser);
 
 export default router;

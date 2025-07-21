@@ -17,6 +17,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 app.use(express.static(path.join(__dirname, 'client')));
+app.use('/test', express.static(path.join(__dirname, 'testClient'), {
+    setHeaders: (res, path) => {
+        // Prevent caching for testClient files during development
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+    }
+}));
 app.use('/css', express.static(path.join(__dirname, 'css')));
 app.use(express.json());
 app.use(session({
@@ -67,5 +75,5 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(port, () => {
-    open(`http://localhost:${port}/login.html`);
+    open(`http://localhost:${port}/test/index.html`);
 });

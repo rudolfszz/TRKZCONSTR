@@ -56,3 +56,13 @@ export const getDriveClient = (req) => {
     const oauth2Client = initOAuth2Client(req);
     return google.drive({ version: 'v3', auth: oauth2Client });
 };
+
+/**
+ * Get Google Sheets API client
+ * @param {Object} req - Express request object with session
+ * @returns {Object} - Google Sheets API client
+ */
+export const getSheetsClient = (req) => {
+    const oauth2Client = initOAuth2Client(req);
+    return google.sheets({ version: 'v4', auth: oauth2Client });
+};

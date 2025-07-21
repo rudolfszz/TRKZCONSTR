@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Check-in - TRKZ</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="dashboard">
+        <div class="header">
+            <h1 id="project-title" class="project-title">Daily Check-in</h1>
+            <div>
+                <a href="#" id="back-to-dashboard" class="back-btn">← Back to Dashboard</a>
+                <button id="logout-btn" class="logout-btn">Logout</button>
+            </div>
+        </div>
+        
+        <div class="checkin-container">
+            <div class="checkin-header">
+                <h2>📊 Today's Check-in</h2>
+                <div class="current-date" id="current-date"></div>
+            </div>
+            
+            <div class="checkin-content">
+                <!-- Loading State -->
+                <div id="loading-state" class="loading">Loading check-in form...</div>
+                
+                <!-- Check-in Form -->
+                <div id="checkin-form" class="checkin-form" style="display: none;">
+                    <div class="form-grid">
+                        <div class="form-item">
+                            <label for="hours-worked">Hours Worked</label>
+                            <input type="number" id="hours-worked" placeholder="0" min="0" max="24" step="0.5">
+                            <span class="unit">hours</span>
+                        </div>
+                        
+                        <div class="form-item">
+                            <label for="tasks-completed">Tasks Completed</label>
+                            <input type="number" id="tasks-completed" placeholder="0" min="0" step="1">
+                            <span class="unit">tasks</span>
+                        </div>
+                        
+                        <div class="form-item">
+                            <label for="progress-percent">Progress %</label>
+                            <input type="number" id="progress-percent" placeholder="0" min="0" max="100" step="5">
+                            <span class="unit">%</span>
+                        </div>
+                        
+                        <div class="form-item">
+                            <label for="number-x">Number of X</label>
+                            <input type="number" id="number-x" placeholder="0" min="0" step="1">
+                            <span class="unit">items</span>
+                        </div>
+                        
+                        <div class="form-item">
+                            <label for="number-y">Number of Y</label>
+                            <input type="number" id="number-y" placeholder="0" min="0" step="1">
+                            <span class="unit">items</span>
+                        </div>
+                        
+                        <div class="form-item full-width">
+                            <label for="weather">Weather</label>
+                            <select id="weather">
+                                <option value="">Select weather...</option>
+                                <option value="Sunny">☀️ Sunny</option>
+                                <option value="Cloudy">☁️ Cloudy</option>
+                                <option value="Rainy">🌧️ Rainy</option>
+                                <option value="Snowy">❄️ Snowy</option>
+                                <option value="Clear">🌤️ Clear</option>
+                                <option value="Stormy">⛈️ Stormy</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-item full-width">
+                            <label for="mood">Mood</label>
+                            <select id="mood">
+                                <option value="">Select mood...</option>
+                                <option value="Excellent">😄 Excellent</option>
+                                <option value="Productive">💪 Productive</option>
+                                <option value="Focused">🎯 Focused</option>
+                                <option value="Motivated">🚀 Motivated</option>
+                                <option value="Tired">😴 Tired</option>
+                                <option value="Stressed">😰 Stressed</option>
+                                <option value="Neutral">😐 Neutral</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-item full-width">
+                            <label for="status">Status</label>
+                            <select id="status">
+                                <option value="">Select status...</option>
+                                <option value="Ahead">🎯 Ahead</option>
+                                <option value="On Track">✅ On Track</option>
+                                <option value="Behind">⚠️ Behind</option>
+                                <option value="Blocked">🚫 Blocked</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-item full-width">
+                            <label for="notes">Notes</label>
+                            <textarea id="notes" placeholder="Any additional notes for today..." rows="3"></textarea>
+                        </div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button id="save-checkin-btn" class="btn btn-primary">💾 Save Today's Check-in</button>
+                        <button id="view-history-btn" class="btn btn-secondary">📋 View History</button>
+                    </div>
+                </div>
+                
+                <!-- Status Message -->
+                <div id="status-message" class="status-message" style="display: none;"></div>
+                
+                <!-- History View -->
+                <div id="history-view" class="history-view" style="display: none;">
+                    <div class="history-header">
+                        <h3>📈 Check-in History</h3>
+                        <button id="close-history-btn" class="btn btn-secondary">✖️ Close</button>
+                    </div>
+                    <div id="history-content" class="history-content">
+                        <div class="loading">Loading history...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="daily-checkin.js?v=1"></script>
+</body>
+</html>
