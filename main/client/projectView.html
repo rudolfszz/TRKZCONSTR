@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Layout</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Calendar section - dynamically populated -->
+        <div class="box calendar" id="calendar-section">
+            <h4>Today's Events</h4>
+            <div id="calendar-events"></div>
+        </div>
+        
+        <!-- Todo section -->
+        <div class="box todo" id="todo-section">
+            <h4>To Do List</h4>
+            <div id="todo-content"></div>
+        </div>
+        
+        <!-- Others section -->
+        <div class="box others" id="others-section">
+            <h4>Quick Actions</h4>
+            <div id="others-content"></div>
+        </div>
+        
+        <!-- Notes section - text input for manager -->
+        <div class="box notes" id="notes-section">
+            <h4>Manager Notes</h4>
+            <textarea id="notes-input" placeholder="Add notes to personal work folder..."></textarea>
+            <button id="save-notes-btn">Save Note</button>
+        </div>
+        
+        <!-- Random section -->
+        <div class="box random" id="random-section">
+            <h4>Calendar Overview</h4>
+            <div id="random-content"></div>
+        </div>
+        
+        <!-- Emails section - dynamically populated -->
+        <div class="box emails" id="emails-section">
+            <h4>Recent Emails</h4>
+            <div id="emails-content" class="scrollable-content">
+                <div class="loading">Loading emails...</div>
+            </div>
+        </div>
+        
+        <!-- Recent entries section - worker entries -->
+        <div class="box recent" id="recent-section">
+            <h4>Worker Entries</h4>
+            <div id="recent-content"></div>
+        </div>
+    </div>
+    <script type="module" src="projectView.js"></script>
+</body>
+</html>
+
+

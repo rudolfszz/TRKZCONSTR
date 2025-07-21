@@ -22,7 +22,19 @@
         </form>
         <div id="note-result"></div>
     </div>
+    <div id="camera-section">
+        <h2>Take or Upload a Photo</h2>
+        <video id="camera-stream" width="320" height="240" autoplay style="display:none;"></video>
+        <canvas id="photo-canvas" width="320" height="240" style="display:none;"></canvas>
+        <button id="start-camera-btn" type="button">Start Camera</button>
+        <button id="take-photo-btn" type="button" style="display:none;">Take Photo</button>
+        <input type="file" id="select-photo-input" accept="image/*" style="display:block;margin-top:10px;">
+        <button id="upload-photo-btn" type="button" style="display:none;">Upload Photo</button>
+        <div id="photo-result"></div>
+    </div>
+    <button id="switch-to-manager-btn">Switch to Manager View</button>
     <button id="logout-btn">Log Out</button>
-    <script src="workerSide.js"></script>
+    <a href="privacy.html" target="_blank" style="position:absolute;right:10px;top:10px;">Privacy Policy</a>
+    <script type="module" src="workerSide.js"></script>
 </body>
 </html>

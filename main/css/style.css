@@ -1,0 +1,450 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background-color: #1a1a1a;
+    font-family: Arial, sans-serif;
+    color: white;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+.container {
+    position: relative;
+    width: 1540px;
+    height: 820px;
+}
+
+.box {
+    position: absolute;
+    background-color: #555555;
+    border-radius: 25px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    font-size: 18px;
+    font-weight: bold;
+    padding: 20px;
+}
+
+/* Top row */
+.calendar {
+    top: 0;
+    left: 0;
+    width: 900px;
+    height: 400px;
+}
+
+.todo {
+    top: 0;
+    left: 920px;
+    width: 300px;
+    height: 190px;
+}
+
+.others {
+    top: 210px;
+    left: 920px;
+    width: 300px;
+    height: 190px;
+}
+
+.notes {
+    top: 0;
+    left: 1240px;
+    width: 300px;
+    height: 400px;
+}
+
+/* Bottom row */
+.random {
+    top: 420px;
+    left: 0;
+    width: 300px;
+    height: 400px;
+}
+
+.emails {
+    top: 420px;
+    left: 320px;
+    width: 600px;
+    height: 400px;
+}
+
+.recent {
+    top: 420px;
+    left: 940px;
+    width: 600px;
+    height: 400px;
+}
+
+/* Dashboard content styles */
+.box h4 {
+    margin-bottom: 10px;
+    color: #fff;
+    font-size: 16px;
+    border-bottom: 1px solid #666;
+    padding-bottom: 5px;
+}
+
+/* Calendar events */
+.event-item {
+    background-color: #666;
+    margin-bottom: 8px;
+    padding: 8px;
+    border-radius: 4px;
+    border-left: 3px solid #4CAF50;
+}
+
+.event-title {
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 3px;
+}
+
+.event-time {
+    color: #ccc;
+    font-size: 12px;
+}
+
+.event-description {
+    color: #ddd;
+    font-size: 11px;
+    margin-top: 3px;
+}
+
+/* Email items */
+.emails .scrollable-content {
+    max-height: calc(100% - 40px);
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+.email-item {
+    width: 100%;
+    background-color: #666;
+    margin-bottom: 8px;
+    padding: 12px 16px;
+    border-radius: 4px;
+    border-left: 3px solid #2196F3;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    transition: background-color 0.2s;
+}
+
+.email-item:hover {
+    background-color: #777;
+}
+
+.email-sender {
+    font-weight: bold;
+    color: #fff;
+    font-size: 13px;
+    margin-bottom: 2px;
+}
+
+.email-subject {
+    color: #e3f2fd;
+    font-size: 15px;
+    margin-bottom: 3px;
+    font-weight: 500;
+}
+
+.email-snippet {
+    color: #ccc;
+    font-size: 11px;
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+
+.email-date {
+    color: #999;
+    font-size: 11px;
+    text-align: right;
+    margin-top: 4px;
+}
+
+/* Email box layout improvements */
+.box.emails {
+    position: absolute;
+    left: 320px;
+    top: 420px;
+    width: 600px;
+    height: 400px;
+    padding-top: 0;
+}
+
+.box.emails h4 {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    margin: 0;
+    font-size: 18px;
+    color: #fff;
+    z-index: 2;
+}
+
+#emails-content {
+    margin-top: 48px;
+    width: 100%;
+    height: calc(100% - 48px);
+    overflow-y: auto;
+    padding: 0 10px 10px 10px;
+    box-sizing: border-box;
+}
+
+.loading {
+    color: #ccc;
+    font-size: 12px;
+    text-align: center;
+    padding: 20px;
+}
+
+.no-emails {
+    color: #999;
+    font-size: 12px;
+    text-align: center;
+    padding: 20px;
+    font-style: italic;
+}
+
+/* Recent entries */
+.entry-item {
+    background-color: #666;
+    margin-bottom: 6px;
+    padding: 6px;
+    border-radius: 4px;
+    border-left: 3px solid #FF9800;
+}
+
+.entry-worker {
+    font-weight: bold;
+    color: #fff;
+    font-size: 12px;
+}
+
+.entry-content {
+    color: #ddd;
+    font-size: 11px;
+    margin-bottom: 2px;
+}
+
+.entry-date {
+    color: #999;
+    font-size: 10px;
+}
+
+/* Todo list */
+.todo-list {
+    margin-bottom: 10px;
+}
+
+.todo-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 4px;
+    padding: 4px;
+    background-color: #666;
+    border-radius: 3px;
+}
+
+.todo-item.completed {
+    opacity: 0.6;
+}
+
+.todo-item.completed span {
+    text-decoration: line-through;
+}
+
+.todo-item input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+.todo-item span {
+    color: #fff;
+    font-size: 12px;
+}
+
+.todo-input {
+    display: flex;
+    gap: 5px;
+}
+
+.todo-input input {
+    flex: 1;
+    padding: 5px;
+    border: 1px solid #666;
+    background-color: #444;
+    color: #fff;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+.todo-input button {
+    padding: 5px 10px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.todo-input button:hover {
+    background-color: #45a049;
+}
+
+/* Notes section */
+#notes-input {
+    width: 100%;
+    height: 200px;
+    background-color: #444;
+    color: #fff;
+    border: 1px solid #666;
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 12px;
+    resize: vertical;
+    margin-bottom: 10px;
+}
+
+#save-notes-btn {
+    width: 100%;
+    padding: 8px;
+    background-color: #2196F3;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+#save-notes-btn:hover {
+    background-color: #1976D2;
+}
+
+/* Quick actions */
+.others button {
+    display: block;
+    width: 100%;
+    margin-bottom: 5px;
+    padding: 8px;
+    background-color: #666;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.others button:hover {
+    background-color: #777;
+}
+
+/* Calendar overview */
+.calendar-overview {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.calendar-item {
+    background-color: #666;
+    padding: 6px;
+    border-radius: 4px;
+    border-left: 3px solid #9C27B0;
+}
+
+.calendar-name {
+    color: #fff;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.calendar-primary {
+    color: #ccc;
+    font-size: 10px;
+}
+
+/* Scrollable content */
+.box > div {
+    max-height: calc(100% - 40px);
+    overflow-y: auto;
+}
+
+/* Custom scrollbar */
+.box > div::-webkit-scrollbar {
+    width: 6px;
+}
+
+.box > div::-webkit-scrollbar-track {
+    background: #333;
+}
+
+.box > div::-webkit-scrollbar-thumb {
+    background: #666;
+    border-radius: 3px;
+}
+
+.box > div::-webkit-scrollbar-thumb:hover {
+    background: #777;
+}
+
+/* Load more button */
+.load-more-container {
+    text-align: center;
+    padding: 10px;
+    margin-top: 5px;
+}
+
+#load-more-emails {
+    background-color: #2196F3;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    transition: background-color 0.2s;
+}
+
+#load-more-emails:hover {
+    background-color: #1976D2;
+}
+
+#load-more-emails:disabled {
+    background-color: #666;
+    cursor: not-allowed;
+}
+
+/* Enhanced scrollbar for emails */
+.emails .scrollable-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.emails .scrollable-content::-webkit-scrollbar-track {
+    background: #333;
+    border-radius: 4px;
+}
+
+.emails .scrollable-content::-webkit-scrollbar-thumb {
+    background: #2196F3;
+    border-radius: 4px;
+}
+
+.emails .scrollable-content::-webkit-scrollbar-thumb:hover {
+    background: #1976D2;
+}
+
+
